@@ -234,6 +234,14 @@ async fn voice_autocomplete<'a>(
                 )
             })
         }),
+        TTSMode::OpenAI => &mut [
+            ("alloy".to_string(), "alloy".to_string()),
+            ("echo".to_string(), "echo".to_string()),
+            ("fable".to_string(), "fable".to_string()),
+            ("onyx".to_string(), "onyx".to_string()),
+            ("nova".to_string(), "nova".to_string()),
+            ("shimmer".to_string(), "shimmer".to_string()),
+        ].iter().cloned(),
     };
 
     let searching_lower = searching.to_lowercase();
@@ -385,7 +393,7 @@ fn get_voice_name<'a>(data: &'a Data, code: &str, mode: TTSMode) -> Option<&'a F
     match mode {
         TTSMode::gTTS => data.gtts_voices.get(code),
         TTSMode::Polly => data.polly_voices.get(code).map(|n| &n.name),
-        TTSMode::eSpeak | TTSMode::gCloud => None,
+        TTSMode::eSpeak | TTSMode::gCloud | TTSMode::OpenAI => None,
     }
 }
 
@@ -397,6 +405,7 @@ fn check_valid_voice(data: &Data, code: &FixedString<u8>, mode: TTSMode) -> bool
             .split_once(' ')
             .and_then(|(language, variant)| data.gcloud_voices.get(language).map(|l| (l, variant)))
             .is_some_and(|(ls, v)| ls.contains_key(v)),
+        TTSMode::OpenAI => matches!(code.as_str(), "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"),
     }
 }
 
@@ -1188,6 +1197,7 @@ pub async fn voices(
                 let (current_voice, pages) = list_gcloud_voices(&ctx).await?;
                 return run_paginator(current_voice, pages).await;
             }
+            TTSMode::OpenAI => "`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`".to_string(),
         }
     };
 

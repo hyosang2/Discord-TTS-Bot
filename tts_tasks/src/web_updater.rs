@@ -16,6 +16,7 @@ fn remember_to_update_analytics_query() {
         TTSMode::Polly => (),
         TTSMode::eSpeak => (),
         TTSMode::gCloud => (),
+        TTSMode::OpenAI => (),
     }
 }
 
@@ -81,7 +82,8 @@ impl crate::Looper for Updater {
                     event = 'gTTS_tts'   OR
                     event = 'eSpeak_tts' OR
                     event = 'gCloud_tts' OR
-                    event = 'Polly_tts'
+                    event = 'Polly_tts'  OR
+                    event = 'OpenAI_tts'
                 )
             ",
             )

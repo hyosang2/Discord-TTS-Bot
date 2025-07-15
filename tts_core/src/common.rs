@@ -91,6 +91,51 @@ pub async fn fetch_audio(
     }
 }
 
+pub async fn fetch_openai_audio(
+    openai_api_key: &str,
+    content: &str,
+    voice: &str,
+    speaking_rate: f32,
+) -> Result<Option<Vec<u8>>> {
+    use async_openai::{
+        types::{CreateSpeechRequestArgs, SpeechModel, Voice as OpenAIVoice},
+        Client,
+    };
+
+    // Parse voice from string to OpenAI Voice enum
+    let openai_voice = match voice {
+        "alloy" => OpenAIVoice::Alloy,
+        "echo" => OpenAIVoice::Echo,
+        "fable" => OpenAIVoice::Fable,
+        "onyx" => OpenAIVoice::Onyx,
+        "nova" => OpenAIVoice::Nova,
+        "shimmer" => OpenAIVoice::Shimmer,
+        _ => OpenAIVoice::Alloy, // fallback to default
+    };
+
+    let config = async_openai::config::OpenAIConfig::new().with_api_key(openai_api_key);
+    let client = Client::with_config(config);
+
+    let request = CreateSpeechRequestArgs::default()
+        .input(content)
+        .voice(openai_voice)
+        .model(SpeechModel::Tts1) // Use GPT-4o mini TTS model
+        .speed(speaking_rate)
+        .build()?;
+
+    match client.audio().speech(request).await {
+        Ok(response) => {
+            let bytes = response.bytes;
+            Ok(Some(bytes))
+        }
+        Err(e) => {
+            tracing::error!("OpenAI TTS error: {:?}", e);
+            // Return None for rate limiting or other recoverable errors
+            Ok(None)
+        }
+    }
+}
+
 #[must_use]
 pub fn prepare_url(
     mut tts_service: reqwest::Url,

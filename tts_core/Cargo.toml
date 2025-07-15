@@ -31,6 +31,7 @@ serenity.workspace = true
 mini-moka.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
+async-openai.workspace = true
 
 [lints]
 workspace = true

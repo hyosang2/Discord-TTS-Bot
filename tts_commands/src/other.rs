@@ -11,7 +11,7 @@ use poise::{
 
 use aformat::ToArrayString;
 use tts_core::{
-    common::{fetch_audio, prepare_url},
+    common::{fetch_audio, fetch_openai_audio, prepare_url},
     constants::OPTION_SEPERATORS,
     opt_ext::OptionTryUnwrap,
     require_guild,
@@ -122,29 +122,50 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
             .collect();
         let speaking_rate = data.speaking_rate(author.id, mode).await?;
 
-        let url = prepare_url(
-            data.config.tts_service.clone(),
-            message,
-            &voice,
-            mode,
-            &speaking_rate,
-            &u64::MAX.to_arraystring(),
-            translation_lang,
-        );
+        let audio = match mode {
+            TTSMode::OpenAI => {
+                // Use OpenAI TTS API
+                let Some(openai_api_key) = &data.config.openai_api_key else {
+                    ctx.say("OpenAI API key not configured for OpenAI TTS mode").await?;
+                    return Ok(());
+                };
 
-        let auth_key = data.config.tts_service_auth_key.as_deref();
-        let audio = fetch_audio(&data.reqwest, url, auth_key)
-            .await?
-            .try_unwrap()?
-            .bytes()
-            .await?;
+                let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
+                match fetch_openai_audio(openai_api_key, message, &voice, speaking_rate_f32).await? {
+                    Some(bytes) => bytes,
+                    None => {
+                        ctx.say("Failed to generate TTS audio with OpenAI").await?;
+                        return Ok(());
+                    }
+                }
+            }
+            _ => {
+                // Use traditional TTS service for other modes
+                let url = prepare_url(
+                    data.config.tts_service.clone(),
+                    message,
+                    &voice,
+                    mode,
+                    &speaking_rate,
+                    &u64::MAX.to_arraystring(),
+                    translation_lang,
+                );
+
+                let auth_key = data.config.tts_service_auth_key.as_deref();
+                fetch_audio(&data.reqwest, url, auth_key)
+                    .await?
+                    .try_unwrap()?
+                    .bytes()
+                    .await?
+            }
+        };
 
         let mut file_name = author_name;
         file_name.push_str(&aformat!(
             "-{}.{}",
             ctx.id(),
             match mode {
-                TTSMode::gTTS | TTSMode::gCloud | TTSMode::Polly => astr!("mp3"),
+                TTSMode::gTTS | TTSMode::gCloud | TTSMode::Polly | TTSMode::OpenAI => astr!("mp3"),
                 TTSMode::eSpeak => astr!("wav"),
             }
         ));

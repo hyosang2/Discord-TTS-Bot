@@ -70,6 +70,7 @@ pub struct MainConfig {
     pub token: serenity::Token,
     pub main_server: GuildId,
     pub ofs_role: RoleId,
+    pub openai_api_key: Option<FixedString>,
 
     // Only for situations where gTTS has broken
     #[serde(default)]
@@ -541,6 +542,7 @@ pub enum TTSMode {
     Polly,
     eSpeak,
     gCloud,
+    OpenAI,
 }
 
 impl TTSMode {
@@ -548,7 +550,7 @@ impl TTSMode {
     pub const fn is_premium(self) -> bool {
         match self {
             Self::gTTS | Self::eSpeak => false,
-            Self::Polly | Self::gCloud => true,
+            Self::Polly | Self::gCloud | Self::OpenAI => true,
         }
     }
 
@@ -559,6 +561,7 @@ impl TTSMode {
             Self::eSpeak => "en1",
             Self::Polly => "Brian",
             Self::gCloud => "en-US A",
+            Self::OpenAI => "alloy",
         }
     }
 
@@ -569,11 +572,12 @@ impl TTSMode {
             Self::gCloud => SpeakingRateInfo::new(0.25, "1.0", 4.0, "x"),
             Self::Polly => SpeakingRateInfo::new(10.0, "100.0", 500.0, "%"),
             Self::eSpeak => SpeakingRateInfo::new(100.0, "175.0", 400.0, " words per minute"),
+            Self::OpenAI => SpeakingRateInfo::new(0.25, "1.0", 4.0, "x"),
         }
     }
 }
 
-into_static_display!(TTSMode, max_length(6));
+into_static_display!(TTSMode, max_length(7));
 
 #[derive(poise::ChoiceParameter, Clone, Copy)]
 #[allow(non_camel_case_types)]
@@ -591,6 +595,9 @@ pub enum TTSModeChoice {
     #[name = "⭐ Amazon Polly TTS (changeable) ⭐"]
     #[name = "polly"]
     Polly,
+    #[name = "⭐ OpenAI TTS (changeable) ⭐"]
+    #[name = "openai"]
+    OpenAI,
 }
 
 impl From<TTSModeChoice> for TTSMode {
@@ -600,6 +607,7 @@ impl From<TTSModeChoice> for TTSMode {
             TTSModeChoice::Polly => Self::Polly,
             TTSModeChoice::eSpeak => Self::eSpeak,
             TTSModeChoice::gCloud => Self::gCloud,
+            TTSModeChoice::OpenAI => Self::OpenAI,
         }
     }
 }

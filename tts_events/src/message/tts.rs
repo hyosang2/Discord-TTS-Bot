@@ -4,7 +4,7 @@ use aformat::ToArrayString as _;
 use poise::serenity_prelude as serenity;
 
 use tts_core::{
-    common::{clean_msg, fetch_audio, prepare_url},
+    common::{clean_msg, fetch_audio, fetch_openai_audio, prepare_url},
     database::{GuildRow, UserRow},
     errors,
     opt_ext::OptionTryUnwrap as _,
@@ -92,15 +92,6 @@ pub(crate) async fn process_tts_msg(
     }
 
     let speaking_rate = data.speaking_rate(message.author.id, mode).await?;
-    let url = prepare_url(
-        data.config.tts_service.clone(),
-        &content,
-        &voice,
-        mode,
-        &speaking_rate,
-        &guild_row.msg_length.to_arraystring(),
-        guild_row.target_lang(IsPremium::from(is_premium)),
-    );
 
     let call_lock = if let Some(call) = data.songbird.get(guild_id) {
         call
@@ -124,29 +115,65 @@ pub(crate) async fn process_tts_msg(
         }
     };
 
-    // Pre-fetch the audio to handle max_length errors
-    let tts_auth_key = data.config.tts_service_auth_key.as_deref();
-    let Some(audio) = fetch_audio(&data.reqwest, url.clone(), tts_auth_key).await? else {
+    // Handle different TTS modes
+    let audio_result = match mode {
+        TTSMode::OpenAI => {
+            // Use OpenAI TTS API
+            let Some(openai_api_key) = &data.config.openai_api_key else {
+                tracing::error!("OpenAI API key not configured for OpenAI TTS mode");
+                return Ok(());
+            };
+
+            let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
+            match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32).await? {
+                Some(bytes) => {
+                    // Create a response-like object from bytes
+                    let cursor = std::io::Cursor::new(bytes);
+                    Some(songbird::input::Reader::from_memory(cursor)?)
+                }
+                None => return Ok(()),
+            }
+        }
+        _ => {
+            // Use traditional TTS service for other modes
+            let url = prepare_url(
+                data.config.tts_service.clone(),
+                &content,
+                &voice,
+                mode,
+                &speaking_rate,
+                &guild_row.msg_length.to_arraystring(),
+                guild_row.target_lang(IsPremium::from(is_premium)),
+            );
+
+            let tts_auth_key = data.config.tts_service_auth_key.as_deref();
+            let Some(audio) = fetch_audio(&data.reqwest, url.clone(), tts_auth_key).await? else {
+                return Ok(());
+            };
+
+            let hint = audio
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .map(|ct| {
+                    let mut hint = songbird::input::core::probe::Hint::new();
+                    hint.mime_type(ct.to_str()?);
+                    Ok::<_, anyhow::Error>(hint)
+                })
+                .transpose()?;
+
+            Some(songbird::input::Reader::from_input(Box::new(
+                songbird::input::reader_ext::MediaSource::HttpRequest(audio),
+            ))?)
+        }
+    };
+
+    let Some(audio_reader) = audio_result else {
         return Ok(());
     };
 
-    let hint = audio
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .map(|ct| {
-            let mut hint = songbird::input::core::probe::Hint::new();
-            hint.mime_type(ct.to_str()?);
-            Ok::<_, anyhow::Error>(hint)
-        })
-        .transpose()?;
-
-    let input = Box::new(std::io::Cursor::new(audio.bytes().await?));
-    let wrapped_audio =
-        songbird::input::LiveInput::Raw(songbird::input::AudioStream { input, hint });
-
     let track_handle = {
         let mut call = call_lock.lock().await;
-        call.enqueue_input(songbird::input::Input::Live(wrapped_audio, None))
+        call.enqueue_input(songbird::input::Input::from(audio_reader))
             .await
     };
 
@@ -156,6 +183,7 @@ pub(crate) async fn process_tts_msg(
             TTSMode::eSpeak => "eSpeak_tts",
             TTSMode::gCloud => "gCloud_tts",
             TTSMode::Polly => "Polly_tts",
+            TTSMode::OpenAI => "OpenAI_tts",
         }),
         false,
     );

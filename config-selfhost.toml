@@ -7,6 +7,7 @@ log_level = 'info'
 #main_server = id here 
 #ofs_role = = id here
 #token = 
+#openai_api_key = sk-your-openai-api-key-here
 
 [PostgreSQL-Info]
 #database = 

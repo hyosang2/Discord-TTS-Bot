@@ -1,12 +1,13 @@
 [Main]
 log_level = 'info'
-tts_service = 'https://localhost:20310'
+tts_service = 'http://localhost:20310'
 #main_server_invite = 'https://discord.gg/example'
 #announcements_channel = id here
 #invite_channel = id here
 #main_server = id here 
 #ofs_role = id here
 #token = 
+#openai_api_key = sk-your-openai-api-key-here 
 
 [PostgreSQL-Info]
 database = 'tts'
