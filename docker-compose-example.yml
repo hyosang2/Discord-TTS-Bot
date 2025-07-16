@@ -1,29 +1,45 @@
 services:
     bot:
-        image: Discord-TTS/Bot
+        build: .
+        image: discord-tts/bot
         volumes:
           - type: bind
             source: ./config.toml
             target: /config.toml
-
-        depends_on: [database, tts-service]
-        network_mode: "host"
+        depends_on:
+            database:
+                condition: service_healthy
+            # Note: tts-service is optional - OpenAI TTS is now default
+            # tts-service:
+            #     condition: service_started
     database:
         image: postgres:13
-        ports: [5432:5432]
+        ports: [5433:5432]  # Changed to avoid conflicts with local PostgreSQL
+        volumes:
+            - postgres_data:/var/lib/postgresql/data  # Persistent storage
         environment: 
+            POSTGRES_DB: tts
             POSTGRES_USER: tts
             POSTGRES_PASSWORD: tts_password
-    tts-service:
-        image: gnomeddev/tts-service
-        volumes:
-          - type: bind
-            source: ${GOOGLE_APPLICATION_CREDENTIALS}
-            target: /gcp.json
-        environment:
-          -  IPV6_BLOCK
-          -  LOG_LEVEL=INFO
-          -  BIND_ADDR=0.0.0.0:20310
-          -  GOOGLE_APPLICATION_CREDENTIALS=/gcp.json
-        network_mode: "host"
-        expose: [20310]
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U tts -d tts"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+    # TTS Service (Optional - OpenAI TTS is now the default)
+    # Uncomment if you want to use gTTS, eSpeak, Polly, or gCloud TTS services
+    # tts-service:
+    #     image: gnomeddev/tts-service
+    #     volumes:
+    #       - type: bind
+    #         source: ${GOOGLE_APPLICATION_CREDENTIALS}
+    #         target: /gcp.json
+    #     environment:
+    #       -  IPV6_BLOCK
+    #       -  LOG_LEVEL=INFO
+    #       -  BIND_ADDR=0.0.0.0:20310
+    #       -  GOOGLE_APPLICATION_CREDENTIALS=/gcp.json
+    #     ports: [20310:20310]
+
+volumes:
+    postgres_data:
