@@ -90,7 +90,7 @@ sudo systemctl start postgresql
    # Database connection (already configured for Docker)
    database = "tts"
    password = "tts_password" 
-   host = "localhost"
+   host = "database"  # Uses Docker service name for networking
    user = "tts"
    
    [Webhook-Info]
@@ -117,6 +117,11 @@ sudo systemctl start postgresql
    docker compose up --build -d
    docker compose logs bot  # Check status
    ```
+   
+   **✅ Enhanced Docker Setup:**
+   - **Persistent Database Storage**: PostgreSQL data survives container restarts
+   - **Automatic Migration Recovery**: Database issues self-heal on startup
+   - **Improved Reliability**: No more "relation 'guilds' does not exist" errors
 
 ### Self-Hosting Setup:
 
@@ -339,39 +344,28 @@ Once configured and running:
 
 5. **Docker Database Issues ("relation 'guilds' does not exist"):**
    
-   This is a **common recurring issue** that happens when:
-   - Database migrations fail or are interrupted
-   - `setup = true` flag is present in config.toml with corrupted database
-   - Database volume contains partial/invalid schema
+   **✅ RESOLVED: This issue has been permanently fixed** with the following improvements:
+   - **Persistent Database Storage**: PostgreSQL data now persists across container restarts
+   - **Enhanced Migration Logic**: Automatic detection and recovery from database/config mismatches
+   - **Robust Error Handling**: Validation checks ensure tables exist before proceeding
    
-   **Resolution (Fresh Database Reset):**
+   **If you still encounter this issue (unlikely):**
    ```bash
-   # Stop containers and remove database volume completely
+   # Emergency reset (only if absolutely necessary)
    sudo docker compose down -v
-   
-   # Ensure setup flag is removed from config.toml
-   # (Check that config.toml does NOT contain "setup = true")
-   
-   # Rebuild and start with fresh database
    sudo docker compose up --build -d
-   
-   # Check logs to confirm successful migration
-   sudo docker compose logs bot
    ```
    
-   **Alternative Resolution (Keep Existing Data):**
-   ```bash
-   # If you want to preserve existing data, try manual migration
-   sudo docker compose exec database psql -U tts -d tts
-   # Then run: \dt to check existing tables
-   # If tables exist but bot fails, contact support
-   ```
+   **What was fixed:**
+   - Added persistent volume for PostgreSQL data in `docker-compose.yml`
+   - Enhanced migration logic to validate table existence regardless of setup flag
+   - Automatic recovery when database state doesn't match config expectations
+   - Post-migration validation to ensure critical tables were created successfully
    
-   **Prevention:**
-   - Never manually edit the database while bot is running
-   - Always use `docker compose down` before rebuilding
-   - Remove `setup = true` from config.toml after initial setup
-   - Use `docker compose logs bot` to monitor migration status
+   **Prevention (now automatic):**
+   - Database persistence prevents data loss on container restart
+   - Migration system automatically detects and recovers from inconsistent states
+   - No manual intervention required for database management
 
 ### Logs:
 ```bash

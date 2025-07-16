@@ -10,6 +10,15 @@ use tts_core::{
 
 type Transaction<'a> = sqlx::Transaction<'a, sqlx::Postgres>;
 
+async fn table_exists(transaction: &mut Transaction<'_>, table_name: &str) -> Result<bool> {
+    let result = transaction
+        .fetch_optional(&*format!(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = '{table_name}'"
+        ))
+        .await?;
+    Ok(result.is_some())
+}
+
 async fn migrate_single_to_modes(
     transaction: &mut Transaction<'_>,
     table: &str,
@@ -141,8 +150,21 @@ async fn run(config: &mut toml::Table, pool: &sqlx::PgPool) -> Result<()> {
 
 async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Result<()> {
     let main_config = config["Main"].as_table_mut().try_unwrap()?;
-    if main_config.get("setup").is_none() {
+    
+    // Check if setup is needed - either no setup flag or guilds table doesn't exist
+    let needs_setup = main_config.get("setup").is_none() || !table_exists(transaction, "guilds").await?;
+    
+    if needs_setup {
         transaction.execute(DB_SETUP_QUERY).await?;
+        
+        // Validate that critical tables were created successfully
+        if !table_exists(transaction, "guilds").await? {
+            return Err(anyhow::anyhow!("Failed to create guilds table during setup").into());
+        }
+        if !table_exists(transaction, "userinfo").await? {
+            return Err(anyhow::anyhow!("Failed to create userinfo table during setup").into());
+        }
+        
         main_config.insert("setup".into(), true.into());
     }
 

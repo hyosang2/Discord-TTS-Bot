@@ -12,7 +12,7 @@ tts_service = 'http://localhost:20310'
 [PostgreSQL-Info]
 database = 'tts'
 password = 'tts_password'
-host = 'localhost'
+host = 'database'
 user = 'tts'
 
 [Webhook-Info]

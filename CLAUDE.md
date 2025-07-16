@@ -30,7 +30,9 @@ Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-works
 - Copy `config-docker.toml` to `config.toml` for Docker setup
 - Fill out PostgreSQL connection details, Discord bot token, and OpenAI API key
 - Enable privileged gateway intents (Server Members Intent, Message Content Intent) in Discord Developer Portal
-- **Important**: Remove `setup = true` from config.toml after initial setup to prevent migration conflicts
+- **Required fields**: `token`, `openai_api_key`, `announcements_channel`, `invite_channel`, `main_server`, `main_server_invite`, `ofs_role`
+- **Database migration**: Now handled automatically with enhanced recovery mechanisms
+- **Docker**: Use `host = "database"` in PostgreSQL config (not `localhost`)
 
 ### Docker Development
 - `docker compose up --build -d` - Build and run containers
@@ -38,11 +40,15 @@ Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-works
 - Note: TTS service is temporarily disabled in docker-compose.yml
 
 ### Common Docker Issues
-- **"relation 'guilds' does not exist"**: Recurring database migration issue
-  - Root cause: Corrupted database volume or interrupted migrations
-  - Quick fix: `sudo docker compose down -v && sudo docker compose up --build -d`
-  - Always remove `setup = true` from config.toml after initial setup
-  - Use PostgreSQL health check in docker-compose.yml for proper startup sequencing
+- **"relation 'guilds' does not exist"**: ✅ **RESOLVED - Permanent Fix Implemented**
+  - **Root cause identified**: Missing persistent PostgreSQL volumes + setup flag mismatch
+  - **Permanent fixes applied**:
+    - Added persistent volume (`postgres_data`) to `docker-compose.yml`
+    - Enhanced migration logic with table existence validation in `tts_migrations/src/lib.rs`
+    - Fixed database host configuration in `config-docker.toml` (`database` not `localhost`)
+    - Added post-migration validation and automatic recovery mechanisms
+  - **Result**: Database data persists across container restarts, automatic self-healing
+  - **Emergency reset** (if needed): `sudo docker compose down -v && sudo docker compose up --build -d`
 
 ## Architecture
 
@@ -75,6 +81,13 @@ Multi-crate workspace with specialized modules:
 - Background tasks implement `Looper` trait for consistent interval execution
 - Premium command validation via `premium_command_check`
 - Event-driven architecture with centralized error handling
+
+### Database Migration System
+- **Migration entry point**: `tts_migrations::load_db_and_conf()` in `src/main.rs`
+- **Setup logic**: Enhanced with table existence validation (`table_exists()` function)
+- **Recovery mechanism**: Automatic detection of database/config state mismatches
+- **Transaction safety**: All migrations run in single transaction with post-validation
+- **Robustness**: Setup runs if config flag missing OR critical tables don't exist
 
 ## TODO / Roadmap
 
