@@ -8,7 +8,7 @@ use tts_core::{
     database::{GuildRow, UserRow},
     errors,
     opt_ext::OptionTryUnwrap as _,
-    structs::{Data, IsPremium, JoinVCToken, Result, TTSMode},
+    structs::{Data, IsPremium, JoinVCToken, OpenAIModel, Result, TTSMode},
     traits::SongbirdManagerExt as _,
 };
 
@@ -31,7 +31,7 @@ pub(crate) async fn process_tts_msg(
     };
 
     let is_premium = data.is_premium_simple(&ctx.http, guild_id).await?;
-    let (voice, mode) = {
+    let (voice, mode, openai_model) = {
         if let Some(channel_id) = to_autojoin {
             let join_vc_lock = JoinVCToken::acquire(data, guild_id);
             match data.songbird.join_vc(join_vc_lock, channel_id).await {
@@ -55,7 +55,7 @@ pub(crate) async fn process_tts_msg(
             None => None,
         };
 
-        let (voice, mode) = data
+        let (voice, mode, openai_model) = data
             .parse_user_or_guild_with_premium(message.author.id, Some((guild_id, is_premium)))
             .await?;
 
@@ -81,7 +81,7 @@ pub(crate) async fn process_tts_msg(
             &data.last_to_xsaid_tracker,
         );
 
-        (voice, mode)
+        (voice, mode, openai_model)
     };
 
     // Final check, make sure we aren't sending an empty message or just symbols.
@@ -125,11 +125,10 @@ pub(crate) async fn process_tts_msg(
             };
 
             let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
-            match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32).await? {
+            match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32, openai_model).await? {
                 Some(bytes) => {
-                    // Create a response-like object from bytes
-                    let cursor = std::io::Cursor::new(bytes);
-                    Some(songbird::input::Reader::from_memory(cursor)?)
+                    // Create input from bytes directly
+                    Some(songbird::input::Input::from(bytes))
                 }
                 None => return Ok(()),
             }
@@ -151,7 +150,7 @@ pub(crate) async fn process_tts_msg(
                 return Ok(());
             };
 
-            let hint = audio
+            let _hint = audio
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
                 .map(|ct| {
@@ -161,9 +160,9 @@ pub(crate) async fn process_tts_msg(
                 })
                 .transpose()?;
 
-            Some(songbird::input::Reader::from_input(Box::new(
-                songbird::input::reader_ext::MediaSource::HttpRequest(audio),
-            ))?)
+            // For HTTP responses, get bytes and create input
+            let bytes = audio.bytes().await?.to_vec();
+            Some(songbird::input::Input::from(bytes))
         }
     };
 

@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 
 use std::{
     collections::BTreeMap,
@@ -14,7 +13,7 @@ use serenity::small_fixed_array::FixedString;
 
 use tts_core::{
     analytics, create_db_handler, database,
-    structs::{Data, PollyVoice, RegexCache, Result, TTSMode},
+    structs::{Data, RegexCache, Result},
 };
 use tts_events::EventHandler;
 use tts_tasks::{logging::Layer, Looper as _};
@@ -31,7 +30,9 @@ fn main() -> Result<()> {
     let console_layer = console_subscriber::spawn();
 
     println!("Starting tokio runtime");
-    std::env::set_var("RUST_LIB_BACKTRACE", "1");
+    unsafe {
+        std::env::set_var("RUST_LIB_BACKTRACE", "1");
+    }
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
@@ -80,10 +81,10 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         create_db_handler!(pool.clone(), "user_voice", "user_id", "mode"),
         create_db_handler!(pool.clone(), "guild_voice", "guild_id", "mode"),
         create_db_handler!(pool.clone(), "nicknames", "guild_id", "user_id"),
-        fetch_voices(&reqwest, tts_service(), auth_key, TTSMode::gTTS),
-        fetch_voices(&reqwest, tts_service(), auth_key, TTSMode::eSpeak),
-        fetch_voices(&reqwest, tts_service(), auth_key, TTSMode::gCloud),
-        fetch_voices::<Vec<PollyVoice>>(&reqwest, tts_service(), auth_key, TTSMode::Polly),
+        fetch_voices_safe_gtts(&reqwest, tts_service(), auth_key),
+        fetch_voices_safe_espeak(&reqwest, tts_service(), auth_key),
+        fetch_voices_safe_gcloud(&reqwest, tts_service(), auth_key),
+        fetch_voices_safe_polly(&reqwest, tts_service(), auth_key),
         fetch_translation_languages(&reqwest, tts_service(), auth_key),
         async { Ok(http.get_bot_gateway().await?.shards) },
         async {

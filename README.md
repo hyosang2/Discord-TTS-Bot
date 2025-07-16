@@ -1,14 +1,21 @@
-# TTS Bot - Rust Rewrite
+# Discord TTS Bot
 
-Text to speech Discord Bot using Serenity, Songbird, and Poise with **OpenAI TTS API support** including GPT-4o Mini TTS model.
+A powerful, self-hostable Text-to-Speech Discord bot with support for multiple TTS services, currently optimized for OpenAI's high-quality TTS models.
 
-## Features
+## 🚀 Key Features
 
-- **Multiple TTS Engines**: gTTS, eSpeak, Amazon Polly, Google Cloud TTS, and **OpenAI TTS**
-- **OpenAI TTS Integration**: Full support for OpenAI's TTS API with 6 voices (alloy, echo, fable, onyx, nova, shimmer)
-- **Premium Features**: Advanced TTS modes with subscription support
-- **Voice Customization**: Configurable speaking rates, voice selection, and audio settings
-- **Discord Integration**: Seamless voice channel integration with advanced error handling
+- **🎙️ OpenAI TTS Integration**: 
+  - Full support for OpenAI's TTS API with 6 voices (alloy, echo, fable, onyx, nova, shimmer)
+  - **NEW: Multiple OpenAI Models**:
+    - `tts-1`: Faster generation, lower quality
+    - `tts-1-hd`: High definition audio (default)
+    - `gpt-4o-mini-tts`: Experimental GPT-4o mini TTS model
+- **🎛️ Voice Customization**: Configurable speaking rates (0.25x-4.0x), voice selection, and per-user settings
+- **💬 Discord Integration**: Seamless voice channel integration with slash commands and prefix commands
+- **🌐 Multi-Server Support**: Works across multiple Discord servers with independent configurations
+- **🔧 Flexible Configuration**: Per-server and per-user voice settings, customizable prefixes, and more
+
+**Note**: Other TTS engines (gTTS, eSpeak, Amazon Polly, Google Cloud TTS) are temporarily disabled in this configuration.
 
 ## System Requirements
 
@@ -67,21 +74,16 @@ sudo systemctl start postgresql
    
    # Copy and configure
    cp config-docker.toml config.toml
-   cp docker-compose-example.yml docker-compose.yml
-   cp Dockerfile-prod Dockerfile  # or Dockerfile-dev for faster builds
    ```
 
 3. **Edit Configuration:**
-   Edit `config.toml` (copied from `config-docker.toml`) and fill out these **required** fields:
+   Edit `config.toml` and fill out these **required** fields:
    ```toml
    [Main]
    # Discord Bot Token (REQUIRED - from Discord Developer Portal)
    token = "your_discord_bot_token_here"
    
-   # TTS Service URL (already configured for Docker)
-   tts_service = "http://localhost:20310"
-   
-   # OpenAI TTS API Key (OPTIONAL - for OpenAI TTS mode)
+   # OpenAI TTS API Key (REQUIRED - for TTS functionality)
    openai_api_key = "sk-your-openai-api-key-here"
    
    [PostgreSQL-Info]
@@ -110,12 +112,10 @@ sudo systemctl start postgresql
    # main_server_invite = "https://discord.gg/your-invite"
    ```
    
-   Also edit `docker-compose.yml` with your environment variables if needed.
-
 4. **Run:**
    ```bash
-   docker-compose up --build -d
-   docker-compose logs bot  # Check status
+   docker compose up --build -d
+   docker compose logs bot  # Check status
    ```
 
 ### Self-Hosting Setup:
@@ -163,10 +163,7 @@ Copy `config-selfhost.toml` to `config.toml` and fill out these **required** fie
 # Discord Bot Token (REQUIRED - from Discord Developer Portal)
 token = "your_discord_bot_token_here"
 
-# TTS Service URL (REQUIRED - external service)
-tts_service = "https://your-tts-service-instance.com"
-
-# OpenAI TTS API Key (OPTIONAL - for OpenAI TTS mode)
+# OpenAI TTS API Key (REQUIRED - for TTS functionality)
 openai_api_key = "sk-your-openai-api-key-here"
 
 [PostgreSQL-Info]
@@ -231,7 +228,6 @@ stats_key = "your_stats_key"
 
 3. **Use OpenAI TTS:**
    ```
-   /set mode OpenAI          # Switch to OpenAI TTS (premium required)
    /set voice alloy          # Choose voice (alloy, echo, fable, onyx, nova, shimmer)
    /speaking_rate 1.5        # Adjust speed (0.25x to 4.0x)
    /voices                   # List all available voices
@@ -245,7 +241,13 @@ stats_key = "your_stats_key"
    - Go to "Bot" section and create a bot
    - Copy the bot token
 
-2. **Set Bot Permissions:**
+2. **Enable Privileged Gateway Intents:**
+   - In the "Bot" section of your application
+   - Enable these privileged intents:
+     - **Server Members Intent** (required)
+     - **Message Content Intent** (required)
+
+3. **Set Bot Permissions:**
    - In the OAuth2 > URL Generator section
    - Select "bot" scope
    - Select these permissions:
@@ -254,10 +256,14 @@ stats_key = "your_stats_key"
      - Connect (to voice channels)
      - Speak (in voice channels)
      - Embed Links
+     - Read Messages/View Channels
 
-3. **Invite Bot to Server:**
+4. **Invite Bot to Server:**
    - Use the generated OAuth2 URL to invite the bot
    - Ensure the bot has the required permissions
+```
+https://discord.com/oauth2/authorize?client_id=1394185157472423966&permissions=2284932096&integration_type=0&scope=bot
+```
 
 ## Database Setup
 
@@ -266,7 +272,7 @@ The bot uses PostgreSQL with automatic schema migration. The database schema is 
 **Docker Setup** (Automatic):
 ```bash
 # PostgreSQL is included in docker-compose-example.yml
-docker-compose up -d database
+docker compose up -d database
 ```
 
 **Manual Setup:**
@@ -293,13 +299,22 @@ Once configured and running:
 
 2. **TTS Commands:**
    ```
-   /set mode OpenAI            # Use OpenAI TTS (premium)
-   /set voice alloy            # Choose voice
-   /speaking_rate 1.2          # Adjust speed
-   /voices                     # List voices
+   /set voice alloy            # Choose voice (alloy, echo, fable, onyx, nova, shimmer)
+   /set openai_model           # Choose OpenAI model (tts-1, tts-1-hd, gpt-4o-mini-tts)
+   /speaking_rate 1.2          # Adjust speed (0.25x to 4.0x)
+   /voices                     # List all available voices
+   /settings                   # View current settings including OpenAI model
    ```
 
-3. **Type in setup channel** - Messages will be read aloud in voice channel
+3. **OpenAI Model Selection (NEW):**
+   ```
+   /set openai_model tts-1              # Fast generation, lower quality
+   /set openai_model tts-1-hd            # High quality (default)
+   /set openai_model gpt-4o-mini-tts     # Experimental GPT-4o mini model
+   /set openai_model                    # Reset to default (tts-1-hd)
+   ```
+
+4. **Type in setup channel** - Messages will be read aloud in voice channel
 
 ## Troubleshooting
 
@@ -320,12 +335,48 @@ Once configured and running:
 4. **OpenAI TTS:**
    - Verify API key is correct
    - Check OpenAI account has sufficient credits
-   - Ensure premium subscription for OpenAI mode access
+   - Note: OpenAI TTS is now the default mode
+
+5. **Docker Database Issues ("relation 'guilds' does not exist"):**
+   
+   This is a **common recurring issue** that happens when:
+   - Database migrations fail or are interrupted
+   - `setup = true` flag is present in config.toml with corrupted database
+   - Database volume contains partial/invalid schema
+   
+   **Resolution (Fresh Database Reset):**
+   ```bash
+   # Stop containers and remove database volume completely
+   sudo docker compose down -v
+   
+   # Ensure setup flag is removed from config.toml
+   # (Check that config.toml does NOT contain "setup = true")
+   
+   # Rebuild and start with fresh database
+   sudo docker compose up --build -d
+   
+   # Check logs to confirm successful migration
+   sudo docker compose logs bot
+   ```
+   
+   **Alternative Resolution (Keep Existing Data):**
+   ```bash
+   # If you want to preserve existing data, try manual migration
+   sudo docker compose exec database psql -U tts -d tts
+   # Then run: \dt to check existing tables
+   # If tables exist but bot fails, contact support
+   ```
+   
+   **Prevention:**
+   - Never manually edit the database while bot is running
+   - Always use `docker compose down` before rebuilding
+   - Remove `setup = true` from config.toml after initial setup
+   - Use `docker compose logs bot` to monitor migration status
 
 ### Logs:
 ```bash
 # Check bot logs
-docker-compose logs bot          # Docker setup
+docker compose logs bot          # Docker setup
 ./target/release/tts_bot         # Self-hosted (outputs to terminal)
 ```
 
@@ -344,3 +395,31 @@ cargo test
 # Check code quality
 cargo clippy
 ```
+
+## 📋 TODO / Roadmap
+
+### High Priority
+- [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions
+- [ ] **Admin-level control on certain commands** - Implement role-based command permissions
+- [ ] **Automatic sentiment adjustment** - Adjust TTS tone/speed based on message sentiment
+
+### Medium Priority  
+- [ ] **Other TTS services with funny voices** - Re-enable and expand support for:
+  - gTTS with language variety
+  - eSpeak with robotic effects
+  - Amazon Polly with neural voices
+  - Google Cloud TTS with WaveNet
+  - Novelty/character voices
+
+### Future Features
+- [ ] **STT (Speech-to-Text)** - Transcribe voice channel conversations:
+  - Real-time transcription to text channel
+  - Voice command recognition
+  - Meeting notes/summaries
+  - Multi-language support
+
+### Contributing
+Contributions are welcome! Please check the TODO list above for areas where help is needed.
+
+## License
+This project is licensed under the AGPL-3.0 License - see the LICENSE file for details.

@@ -5,7 +5,7 @@ use typesize::derive::TypeSize;
 
 use poise::serenity_prelude::{ChannelId, GuildId, RoleId, UserId};
 
-use crate::structs::{IsPremium, TTSMode};
+use crate::structs::{IsPremium, OpenAIModel, TTSMode};
 
 const MAX_VOICE_LENGTH: usize = 20;
 
@@ -159,14 +159,15 @@ pub struct GuildVoiceRowRaw {
     pub guild_id: i64,
     pub mode: TTSMode,
     pub voice: String,
+    pub openai_model: Option<OpenAIModel>,
 }
 
 #[derive(Debug, Clone, Copy, TypeSize)]
-
 pub struct GuildVoiceRow {
     pub guild_id: Option<GuildId>,
     pub mode: TTSMode,
     pub voice: ArrayString<MAX_VOICE_LENGTH>,
+    pub openai_model: Option<OpenAIModel>,
 }
 
 impl Compact for GuildVoiceRowRaw {
@@ -176,6 +177,7 @@ impl Compact for GuildVoiceRowRaw {
             guild_id: (self.guild_id != 0).then(|| GuildId::new(self.guild_id as u64)),
             mode: self.mode,
             voice: truncate_convert(self.voice, "guildvoicerow.voice"),
+            openai_model: self.openai_model,
         }
     }
 }
@@ -186,6 +188,7 @@ pub struct UserVoiceRowRaw {
     pub mode: TTSMode,
     pub voice: Option<String>,
     pub speaking_rate: Option<f32>,
+    pub openai_model: Option<OpenAIModel>,
 }
 
 #[derive(Debug, Clone, Copy, TypeSize)]
@@ -194,6 +197,7 @@ pub struct UserVoiceRow {
     pub mode: TTSMode,
     pub voice: Option<ArrayString<MAX_VOICE_LENGTH>>,
     pub speaking_rate: Option<f32>,
+    pub openai_model: Option<OpenAIModel>,
 }
 
 impl Compact for UserVoiceRowRaw {
@@ -206,6 +210,7 @@ impl Compact for UserVoiceRowRaw {
                 .voice
                 .map(|v| truncate_convert(v, "uservoicerow.voice")),
             speaking_rate: self.speaking_rate,
+            openai_model: self.openai_model,
         }
     }
 }

@@ -71,10 +71,14 @@ async fn update_startup_message(
             .title(title),
     );
 
-    data.webhooks
-        .logs
-        .edit_message(&ctx.http, data.startup_message, builder)
-        .await?;
+    if let (Some(logs_webhook), Some(startup_message)) = (&data.webhooks.logs, data.startup_message) {
+        logs_webhook
+            .edit_message(&ctx.http, startup_message, builder)
+            .await?;
+    } else {
+        // No logs webhook or startup message configured, skip updating
+        println!("Startup status update: {}", title);
+    }
 
     Ok(())
 }

@@ -1,5 +1,5 @@
-FROM rustlang/rust:nightly as builder
-ENV RUSTFLAGS="-C target-cpu=skylake"
+FROM rustlang/rust:nightly-bookworm as builder
+ENV RUSTFLAGS="-C target-cpu=skylake --cfg tokio_unstable"
 
 WORKDIR /bot
 

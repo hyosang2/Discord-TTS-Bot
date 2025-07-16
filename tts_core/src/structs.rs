@@ -94,9 +94,9 @@ pub struct WebsiteInfo {
 
 #[derive(serde::Deserialize)]
 pub struct WebhookConfigRaw {
-    pub logs: reqwest::Url,
-    pub errors: reqwest::Url,
-    pub dm_logs: reqwest::Url,
+    pub logs: Option<reqwest::Url>,
+    pub errors: Option<reqwest::Url>,
+    pub dm_logs: Option<reqwest::Url>,
 }
 
 #[derive(serde::Deserialize)]
@@ -116,9 +116,9 @@ pub struct PremiumConfig {
 }
 
 pub struct WebhookConfig {
-    pub logs: serenity::Webhook,
-    pub errors: serenity::Webhook,
-    pub dm_logs: serenity::Webhook,
+    pub logs: Option<serenity::Webhook>,
+    pub errors: Option<serenity::Webhook>,
+    pub dm_logs: Option<serenity::Webhook>,
 }
 
 pub struct JoinVCToken(pub GuildId, pub Arc<tokio::sync::Mutex<()>>);
@@ -252,7 +252,7 @@ pub struct Data {
     pub entitlement_cache: mini_moka::sync::Cache<UserId, CachedEntitlement>,
     pub join_vc_tokens: DashMap<GuildId, Arc<tokio::sync::Mutex<()>>>,
     pub last_to_xsaid_tracker: LastToXsaidTracker,
-    pub startup_message: serenity::MessageId,
+    pub startup_message: Option<serenity::MessageId>,
     pub premium_avatar_url: FixedString<u16>,
     pub system_info: Mutex<sysinfo::System>,
     pub start_time: std::time::SystemTime,
@@ -420,7 +420,7 @@ impl Data {
         http: &serenity::Http,
         author_id: UserId,
         guild_id: Option<GuildId>,
-    ) -> Result<(Cow<'static, str>, TTSMode)> {
+    ) -> Result<(Cow<'static, str>, TTSMode, OpenAIModel)> {
         let info = if let Some(guild_id) = guild_id {
             Some((guild_id, self.is_premium_simple(http, guild_id).await?))
         } else {
@@ -434,7 +434,7 @@ impl Data {
         &self,
         author_id: UserId,
         guild_info: Option<(GuildId, bool)>,
-    ) -> Result<(Cow<'static, str>, TTSMode)> {
+    ) -> Result<(Cow<'static, str>, TTSMode, OpenAIModel)> {
         let user_row = self.userinfo_db.get(author_id.into()).await?;
         let (guild_id, guild_is_premium) = match guild_info {
             Some((id, p)) => (Some(id), p),
@@ -487,23 +487,28 @@ impl Data {
         }
 
         let user_voice_row = self.user_voice_db.get((author_id.into(), mode)).await?;
-        let voice =
+        let (voice, openai_model) =
             // Get user voice for user mode
             if user_voice_row.user_id.is_some() {
-                user_voice_row.voice.map(|v| Cow::Owned(v.as_str().to_owned()))
+                let voice = user_voice_row.voice.map(|v| Cow::Owned(v.as_str().to_owned()));
+                let openai_model = user_voice_row.openai_model.unwrap_or_default();
+                (voice, openai_model)
             } else if let Some(guild_id) = guild_id {
                 // Get default server voice for user mode
                 let guild_voice_row = self.guild_voice_db.get((guild_id.into(), mode)).await?;
                 if guild_voice_row.guild_id.is_some() {
-                    Some(Cow::Owned(guild_voice_row.voice.as_str().to_owned()))
+                    let voice = Some(Cow::Owned(guild_voice_row.voice.as_str().to_owned()));
+                    let openai_model = guild_voice_row.openai_model.unwrap_or_default();
+                    (voice, openai_model)
                 } else {
-                    None
+                    (None, OpenAIModel::default())
                 }
             } else {
-                None
-            }.unwrap_or_else(|| Cow::Borrowed(mode.default_voice()));
+                (None, OpenAIModel::default())
+            };
 
-        Ok((voice, mode))
+        let voice = voice.unwrap_or_else(|| Cow::Borrowed(mode.default_voice()));
+        Ok((voice, mode, openai_model))
     }
 }
 
@@ -537,11 +542,11 @@ impl SpeakingRateInfo {
 #[sqlx(rename_all = "lowercase")]
 #[sqlx(type_name = "ttsmode")]
 pub enum TTSMode {
-    #[default]
     gTTS,
     Polly,
     eSpeak,
     gCloud,
+    #[default]
     OpenAI,
 }
 
@@ -579,35 +584,85 @@ impl TTSMode {
 
 into_static_display!(TTSMode, max_length(7));
 
+#[derive(sqlx::Type, Debug, Default, Hash, PartialEq, Eq, Copy, Clone, typesize::derive::TypeSize)]
+#[allow(non_camel_case_types)]
+#[sqlx(rename_all = "lowercase")]
+#[sqlx(type_name = "openaimodel")]
+pub enum OpenAIModel {
+    #[sqlx(rename = "tts-1")]
+    Tts1,
+    #[default]
+    #[sqlx(rename = "tts-1-hd")]
+    Tts1Hd,
+    #[sqlx(rename = "gpt-4o-mini-tts")]
+    Gpt4oMiniTts,
+}
+
+impl OpenAIModel {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tts1 => "tts-1",
+            Self::Tts1Hd => "tts-1-hd", 
+            Self::Gpt4oMiniTts => "gpt-4o-mini-tts",
+        }
+    }
+}
+
+#[derive(poise::ChoiceParameter, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum OpenAIModelChoice {
+    #[name = "TTS-1 (faster, lower quality)"]
+    #[name = "tts-1"]
+    Tts1,
+    #[name = "TTS-1-HD (default, higher quality)"]
+    #[name = "tts-1-hd"]
+    Tts1Hd,
+    #[name = "GPT-4o Mini TTS (experimental)"]
+    #[name = "gpt-4o-mini-tts"]
+    Gpt4oMiniTts,
+}
+
+impl From<OpenAIModelChoice> for OpenAIModel {
+    fn from(model: OpenAIModelChoice) -> Self {
+        match model {
+            OpenAIModelChoice::Tts1 => Self::Tts1,
+            OpenAIModelChoice::Tts1Hd => Self::Tts1Hd,
+            OpenAIModelChoice::Gpt4oMiniTts => Self::Gpt4oMiniTts,
+        }
+    }
+}
+
 #[derive(poise::ChoiceParameter, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum TTSModeChoice {
     // Name to show in slash command invoke               Aliases for prefix
-    #[name = "Google Translate TTS (female) (default)"]
-    #[name = "gtts"]
-    gTTS,
-    #[name = "eSpeak TTS (male)"]
-    #[name = "espeak"]
-    eSpeak,
-    #[name = "⭐ gCloud TTS (changeable) ⭐"]
-    #[name = "gcloud"]
-    gCloud,
-    #[name = "⭐ Amazon Polly TTS (changeable) ⭐"]
-    #[name = "polly"]
-    Polly,
-    #[name = "⭐ OpenAI TTS (changeable) ⭐"]
+    #[name = "OpenAI TTS (high quality)"]
     #[name = "openai"]
     OpenAI,
+    // Temporarily disabled due to missing TTS service
+    // #[name = "Google Translate TTS (female) (default)"]
+    // #[name = "gtts"]
+    // gTTS,
+    // #[name = "eSpeak TTS (male)"]
+    // #[name = "espeak"]
+    // eSpeak,
+    // #[name = "⭐ gCloud TTS (changeable) ⭐"]
+    // #[name = "gcloud"]
+    // gCloud,
+    // #[name = "⭐ Amazon Polly TTS (changeable) ⭐"]
+    // #[name = "polly"]
+    // Polly,
 }
 
 impl From<TTSModeChoice> for TTSMode {
     fn from(mode: TTSModeChoice) -> Self {
         match mode {
-            TTSModeChoice::gTTS => Self::gTTS,
-            TTSModeChoice::Polly => Self::Polly,
-            TTSModeChoice::eSpeak => Self::eSpeak,
-            TTSModeChoice::gCloud => Self::gCloud,
             TTSModeChoice::OpenAI => Self::OpenAI,
+            // TTSModeChoice::gTTS => Self::gTTS,
+            // TTSModeChoice::Polly => Self::Polly,
+            // TTSModeChoice::eSpeak => Self::eSpeak,
+            // TTSModeChoice::gCloud => Self::gCloud,
         }
     }
 }

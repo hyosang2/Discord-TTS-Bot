@@ -140,34 +140,50 @@ pub async fn handle_unexpected<'a>(
         .embeds(&embeds)
         .components(&components);
 
-    let message = data
-        .webhooks
-        .errors
-        .execute(&ctx.http, true, builder)
-        .await?
-        .try_unwrap()?;
+    if let Some(error_webhook) = &data.webhooks.errors {
+        let message = error_webhook
+            .execute(&ctx.http, true, builder)
+            .await?
+            .try_unwrap()?;
 
-    let ErrorRow {
-        message_id: db_message_id,
-    } = sqlx::query_as(
-        "INSERT INTO errors(traceback_hash, traceback, message_id)
-        VALUES($1, $2, $3)
+        let ErrorRow {
+            message_id: db_message_id,
+        } = sqlx::query_as(
+            "INSERT INTO errors(traceback_hash, traceback, message_id)
+            VALUES($1, $2, $3)
 
-        ON CONFLICT (traceback_hash)
-        DO UPDATE SET occurrences = errors.occurrences + 1
-        RETURNING errors.message_id",
-    )
-    .bind(traceback_hash)
-    .bind(traceback)
-    .bind(message.id.get() as i64)
-    .fetch_one(&data.pool)
-    .await?;
+            ON CONFLICT (traceback_hash)
+            DO UPDATE SET occurrences = errors.occurrences + 1
+            RETURNING errors.message_id",
+        )
+        .bind(traceback_hash)
+        .bind(traceback)
+        .bind(message.id.get() as i64)
+        .fetch_one(&data.pool)
+        .await?;
 
-    if message.id != db_message_id as u64 {
-        data.webhooks
-            .errors
-            .delete_message(&ctx.http, None, message.id)
-            .await?;
+        if message.id != db_message_id as u64 {
+            error_webhook
+                .delete_message(&ctx.http, None, message.id)
+                .await?;
+        }
+    } else {
+        // No error webhook configured, just log to console
+        eprintln!("Error occurred but no error webhook configured: {}", error);
+        
+        // Still insert into database but without message_id
+        sqlx::query(
+            "INSERT INTO errors(traceback_hash, traceback, message_id)
+            VALUES($1, $2, $3)
+
+            ON CONFLICT (traceback_hash)
+            DO UPDATE SET occurrences = errors.occurrences + 1",
+        )
+        .bind(traceback_hash)
+        .bind(traceback)
+        .bind(0i64) // Use 0 as placeholder when no webhook message
+        .execute(&data.pool)
+        .await?;
     }
 
     Ok(())

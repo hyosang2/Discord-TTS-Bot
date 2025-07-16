@@ -15,7 +15,7 @@ use tts_core::{
     constants::OPTION_SEPERATORS,
     opt_ext::OptionTryUnwrap,
     require_guild,
-    structs::{ApplicationContext, Command, CommandResult, Context, IsPremium, TTSMode},
+    structs::{ApplicationContext, Command, CommandResult, Context, IsPremium, OpenAIModel, TTSMode},
     traits::PoiseContextExt as _,
 };
 
@@ -103,7 +103,7 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
             None
         };
 
-        let (voice, mode) = data
+        let (voice, mode, openai_model) = data
             .parse_user_or_guild_with_premium(author.id, guild_info)
             .await?;
 
@@ -131,7 +131,7 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
                 };
 
                 let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
-                match fetch_openai_audio(openai_api_key, message, &voice, speaking_rate_f32).await? {
+                match fetch_openai_audio(openai_api_key, message, &voice, speaking_rate_f32, openai_model).await? {
                     Some(bytes) => bytes,
                     None => {
                         ctx.say("Failed to generate TTS audio with OpenAI").await?;
@@ -157,6 +157,7 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
                     .try_unwrap()?
                     .bytes()
                     .await?
+                    .to_vec()
             }
         };
 

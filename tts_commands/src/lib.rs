@@ -1,4 +1,3 @@
-#![feature(let_chains, debug_closure_helpers)]
 
 use std::borrow::Cow;
 

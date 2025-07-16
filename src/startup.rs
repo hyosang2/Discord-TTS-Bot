@@ -1,21 +1,25 @@
 use std::collections::BTreeMap;
 
-use small_fixed_array::{FixedString, TruncatingInto as _};
+use small_fixed_array::{FixedArray, FixedString, TruncatingInto as _};
 
 use poise::serenity_prelude as serenity;
 
 use tts_core::{
     opt_ext::OptionTryUnwrap as _,
-    structs::{GoogleGender, GoogleVoice, Result, TTSMode, WebhookConfig, WebhookConfigRaw},
+    structs::{GoogleGender, GoogleVoice, PollyVoice, Result, TTSMode, WebhookConfig, WebhookConfigRaw},
 };
 
 pub async fn get_webhooks(
     http: &serenity::Http,
     webhooks_raw: WebhookConfigRaw,
 ) -> Result<WebhookConfig> {
-    let get_webhook = |url: reqwest::Url| async move {
-        let (webhook_id, _) = serenity::parse_webhook(&url).try_unwrap()?;
-        anyhow::Ok(webhook_id.to_webhook(http).await?)
+    let get_webhook = |url: Option<reqwest::Url>| async move {
+        if let Some(url) = url {
+            let (webhook_id, _) = serenity::parse_webhook(&url).try_unwrap()?;
+            anyhow::Ok(Some(webhook_id.to_webhook(http).await?))
+        } else {
+            anyhow::Ok(None)
+        }
     };
 
     let (logs, errors, dm_logs) = tokio::try_join!(
@@ -74,16 +78,83 @@ pub async fn fetch_translation_languages(
 ) -> Result<BTreeMap<FixedString<u8>, FixedString<u8>>> {
     tts_service.set_path("translation_languages");
 
-    let raw_langs: Vec<(String, FixedString<u8>)> =
-        fetch_json(reqwest, tts_service, auth_key.unwrap_or("")).await?;
+    match fetch_json::<Vec<(String, FixedString<u8>)>>(reqwest, tts_service, auth_key.unwrap_or("")).await {
+        Ok(raw_langs) => {
+            let lang_map = raw_langs.into_iter().map(|(mut lang, name)| {
+                lang.make_ascii_lowercase();
+                (lang.trunc_into(), name)
+            });
 
-    let lang_map = raw_langs.into_iter().map(|(mut lang, name)| {
-        lang.make_ascii_lowercase();
-        (lang.trunc_into(), name)
-    });
+            println!("Loaded DeepL translation languages");
+            Ok(lang_map.collect())
+        }
+        Err(e) => {
+            eprintln!("Failed to fetch translation languages: {e}");
+            println!("Using empty translation languages list");
+            Ok(BTreeMap::new())
+        }
+    }
+}
 
-    println!("Loaded DeepL translation languages");
-    Ok(lang_map.collect())
+// Wrapper functions that provide fallback values when TTS service is unavailable
+pub async fn fetch_voices_safe_gtts(
+    reqwest: &reqwest::Client,
+    tts_service: reqwest::Url,
+    auth_key: Option<&str>,
+) -> Result<BTreeMap<FixedString<u8>, FixedString<u8>>> {
+    match fetch_voices(reqwest, tts_service, auth_key, TTSMode::gTTS).await {
+        Ok(voices) => Ok(voices),
+        Err(e) => {
+            eprintln!("Failed to fetch gTTS voices: {e}");
+            println!("Using empty gTTS voice list");
+            Ok(BTreeMap::new())
+        }
+    }
+}
+
+pub async fn fetch_voices_safe_espeak(
+    reqwest: &reqwest::Client,
+    tts_service: reqwest::Url,
+    auth_key: Option<&str>,
+) -> Result<FixedArray<FixedString<u8>>> {
+    match fetch_voices(reqwest, tts_service, auth_key, TTSMode::eSpeak).await {
+        Ok(voices) => Ok(voices),
+        Err(e) => {
+            eprintln!("Failed to fetch eSpeak voices: {e}");
+            println!("Using empty eSpeak voice list");
+            Ok(FixedArray::new())
+        }
+    }
+}
+
+pub async fn fetch_voices_safe_gcloud(
+    reqwest: &reqwest::Client,
+    tts_service: reqwest::Url,
+    auth_key: Option<&str>,
+) -> Result<Vec<GoogleVoice>> {
+    match fetch_voices(reqwest, tts_service, auth_key, TTSMode::gCloud).await {
+        Ok(voices) => Ok(voices),
+        Err(e) => {
+            eprintln!("Failed to fetch gCloud voices: {e}");
+            println!("Using empty gCloud voice list");
+            Ok(Vec::new())
+        }
+    }
+}
+
+pub async fn fetch_voices_safe_polly(
+    reqwest: &reqwest::Client,
+    tts_service: reqwest::Url,
+    auth_key: Option<&str>,
+) -> Result<Vec<PollyVoice>> {
+    match fetch_voices(reqwest, tts_service, auth_key, TTSMode::Polly).await {
+        Ok(voices) => Ok(voices),
+        Err(e) => {
+            eprintln!("Failed to fetch Polly voices: {e}");
+            println!("Using empty Polly voice list");
+            Ok(Vec::new())
+        }
+    }
 }
 
 pub fn prepare_gcloud_voices(
@@ -114,10 +185,14 @@ pub fn prepare_gcloud_voices(
 
 pub async fn send_startup_message(
     http: &serenity::Http,
-    log_webhook: &serenity::Webhook,
-) -> Result<serenity::MessageId> {
-    let startup_builder = serenity::ExecuteWebhook::default().content("**TTS Bot is starting up**");
-    let startup_message = log_webhook.execute(http, true, startup_builder).await?;
-
-    Ok(startup_message.unwrap().id)
+    log_webhook: &Option<serenity::Webhook>,
+) -> Result<Option<serenity::MessageId>> {
+    if let Some(webhook) = log_webhook {
+        let startup_builder = serenity::ExecuteWebhook::default().content("**TTS Bot is starting up**");
+        let startup_message = webhook.execute(http, true, startup_builder).await?;
+        Ok(Some(startup_message.unwrap().id))
+    } else {
+        println!("No log webhook configured, skipping startup message");
+        Ok(None)
+    }
 }

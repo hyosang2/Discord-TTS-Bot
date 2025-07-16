@@ -105,7 +105,7 @@ pub async fn autocomplete<'a>(
     serenity::CreateAutocompleteResponse::new().set_choices(result.into_iter().collect::<Vec<_>>())
 }
 
-/// Shows TTS Bot's commands and descriptions of them
+/// Shows TTS Bot's commands and descriptions (featuring OpenAI TTS)
 #[poise::command(
     prefix_command,
     slash_command,

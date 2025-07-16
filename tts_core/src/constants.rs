@@ -27,7 +27,8 @@ pub const DB_SETUP_QUERY: &str = "
         'gtts',
         'polly',
         'espeak',
-        'gcloud'
+        'gcloud',
+        'openai'
     );
 
     CREATE TABLE userinfo (
@@ -54,7 +55,7 @@ pub const DB_SETUP_QUERY: &str = "
         required_prefix varchar(6),
         target_lang     varchar(5),
         audience_ignore bool        DEFAULT True,
-        voice_mode      TTSMode     DEFAULT 'gtts',
+        voice_mode      TTSMode     DEFAULT 'openai',
 
         FOREIGN KEY         (premium_user)
         REFERENCES userinfo (user_id)
@@ -120,6 +121,6 @@ pub const DB_SETUP_QUERY: &str = "
     INSERT INTO userinfo(user_id) VALUES(0);
     INSERT INTO nicknames(guild_id, user_id) VALUES (0, 0);
 
-    INSERT INTO user_voice(user_id, mode) VALUES(0, 'gtts');
-    INSERT INTO guild_voice(guild_id, mode, voice) VALUES(0, 'gtts', 'en');
+    INSERT INTO user_voice(user_id, mode) VALUES(0, 'openai');
+    INSERT INTO guild_voice(guild_id, mode, voice) VALUES(0, 'openai', 'alloy');
 ";

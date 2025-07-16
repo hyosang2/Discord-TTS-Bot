@@ -96,6 +96,7 @@ pub async fn fetch_openai_audio(
     content: &str,
     voice: &str,
     speaking_rate: f32,
+    model: crate::structs::OpenAIModel,
 ) -> Result<Option<Vec<u8>>> {
     use async_openai::{
         types::{CreateSpeechRequestArgs, SpeechModel, Voice as OpenAIVoice},
@@ -116,17 +117,24 @@ pub async fn fetch_openai_audio(
     let config = async_openai::config::OpenAIConfig::new().with_api_key(openai_api_key);
     let client = Client::with_config(config);
 
+    // Convert our enum to OpenAI's SpeechModel
+    let speech_model = match model {
+        crate::structs::OpenAIModel::Tts1 => SpeechModel::Tts1,
+        crate::structs::OpenAIModel::Tts1Hd => SpeechModel::Tts1Hd,
+        crate::structs::OpenAIModel::Gpt4oMiniTts => SpeechModel::Other("gpt-4o-mini-tts".to_string()),
+    };
+
     let request = CreateSpeechRequestArgs::default()
         .input(content)
         .voice(openai_voice)
-        .model(SpeechModel::Tts1) // Use GPT-4o mini TTS model
+        .model(speech_model)
         .speed(speaking_rate)
         .build()?;
 
     match client.audio().speech(request).await {
         Ok(response) => {
             let bytes = response.bytes;
-            Ok(Some(bytes))
+            Ok(Some(bytes.to_vec()))
         }
         Err(e) => {
             tracing::error!("OpenAI TTS error: {:?}", e);

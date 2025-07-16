@@ -5,7 +5,7 @@ use sqlx::{Connection as _, Executor, Row};
 use tts_core::{
     constants::DB_SETUP_QUERY,
     opt_ext::OptionTryUnwrap,
-    structs::{Config, PostgresConfig, Result, TTSMode},
+    structs::{Config, OpenAIModel, PostgresConfig, Result, TTSMode},
 };
 
 type Transaction<'a> = sqlx::Transaction<'a, sqlx::Postgres>;
@@ -27,6 +27,18 @@ async fn migrate_single_to_modes(
     );
 
     let mut delete_voice = false;
+    // Check if table exists before querying it
+    let table_exists = transaction
+        .fetch_optional(&*format!(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = '{table}'"
+        ))
+        .await?
+        .is_some();
+    
+    if !table_exists {
+        return Ok(());
+    }
+    
     for row in transaction
         .fetch_all(&*format!("SELECT * FROM {table}"))
         .await?
@@ -149,6 +161,17 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
 
             ALTER TYPE TTSMode RENAME VALUE 'premium' TO 'gcloud';
             ALTER TYPE TTSMode ADD VALUE 'polly';
+            ALTER TYPE TTSMode ADD VALUE 'openai';
+        EXCEPTION
+            WHEN OTHERS THEN null;
+        END $$;
+
+        DO $$ BEGIN
+            CREATE type OpenAIModel AS ENUM (
+                'tts-1',
+                'tts-1-hd',
+                'gpt-4o-mini-tts'
+            );
         EXCEPTION
             WHEN OTHERS THEN null;
         END $$;
@@ -194,7 +217,10 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
             ADD COLUMN IF NOT EXISTS text_in_voice    bool       DEFAULT True,
             ADD COLUMN IF NOT EXISTS skip_emoji       bool       DEFAULT False;
         ALTER TABLE user_voice
-            ADD COLUMN IF NOT EXISTS speaking_rate real;
+            ADD COLUMN IF NOT EXISTS speaking_rate real,
+            ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd';
+        ALTER TABLE guild_voice
+            ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd';
 
         -- The old table had a pkey on traceback, now we hash and pkey on that
         ALTER TABLE errors
@@ -207,6 +233,8 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
 
         INSERT INTO user_voice  (user_id, mode)         VALUES(0, 'gtts')       ON CONFLICT (user_id, mode)  DO NOTHING;
         INSERT INTO guild_voice (guild_id, mode, voice) VALUES(0, 'gtts', 'en') ON CONFLICT (guild_id, mode) DO NOTHING;
+        INSERT INTO user_voice  (user_id, mode)         VALUES(0, 'openai')     ON CONFLICT (user_id, mode)  DO NOTHING;
+        INSERT INTO guild_voice (guild_id, mode, voice) VALUES(0, 'openai', 'alloy') ON CONFLICT (guild_id, mode) DO NOTHING;
     ").await?;
 
     migrate_single_to_modes(transaction, "userinfo", "user_voice", "voice", "user_id").await?;

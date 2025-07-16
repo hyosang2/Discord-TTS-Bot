@@ -29,16 +29,16 @@ pub struct WebhookLogger {
 
     pending_logs: Mutex<HashMap<tracing::Level, Vec<LogMessage>>>,
 
-    normal_logs: Webhook,
-    error_logs: Webhook,
+    normal_logs: Option<Webhook>,
+    error_logs: Option<Webhook>,
 }
 
 impl WebhookLogger {
     pub fn init(
         console_layer: impl Layer,
         http: Arc<Http>,
-        normal_logs: Webhook,
-        error_logs: Webhook,
+        normal_logs: Option<Webhook>,
+        error_logs: Option<Webhook>,
     ) {
         let logger = ArcWrapper(Arc::new(Self {
             http,
@@ -101,16 +101,23 @@ impl Looper for Arc<WebhookLogger> {
                 &self.normal_logs
             };
 
-            let webhook_name = aformat!("TTS-Webhook [{}]", CapStr::<5>(severity.as_str()));
+            if let Some(webhook) = webhook {
+                let webhook_name = aformat!("TTS-Webhook [{}]", CapStr::<5>(severity.as_str()));
 
-            for chunk in chunks {
-                let builder = ExecuteWebhook::default()
-                    .content(&chunk)
-                    .username(webhook_name.as_str())
-                    .avatar_url(get_avatar(severity));
+                for chunk in chunks {
+                    let builder = ExecuteWebhook::default()
+                        .content(&chunk)
+                        .username(webhook_name.as_str())
+                        .avatar_url(get_avatar(severity));
 
-                if let Err(err) = webhook.execute(&self.http, false, builder).await {
-                    eprintln!("Failed to send log message: {err:?}\n{chunk}");
+                    if let Err(err) = webhook.execute(&self.http, false, builder).await {
+                        eprintln!("Failed to send log message: {err:?}\n{chunk}");
+                    }
+                }
+            } else {
+                // No webhook configured, just print to console
+                for chunk in chunks {
+                    println!("[{}] {}", severity, chunk);
                 }
             }
         }

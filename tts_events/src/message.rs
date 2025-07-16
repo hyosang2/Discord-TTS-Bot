@@ -158,10 +158,14 @@ async fn process_support_dm(ctx: &serenity::Context, message: &serenity::Message
                         .collect::<Vec<_>>(),
                 );
 
-            data.webhooks
-                .dm_logs
-                .execute(&ctx.http, false, builder)
-                .await?;
+            if let Some(dm_logs_webhook) = &data.webhooks.dm_logs {
+                dm_logs_webhook
+                    .execute(&ctx.http, false, builder)
+                    .await?;
+            } else {
+                // No dm_logs webhook configured, skip logging DM
+                println!("DM received but no dm_logs webhook configured");
+            }
         }
     } else {
         let (client_id, title) = {
@@ -206,7 +210,12 @@ async fn process_support_response(
     data: &Data,
     channel_id: serenity::GenericChannelId,
 ) -> Result<()> {
-    if data.webhooks.dm_logs.channel_id.try_unwrap()? != channel_id.expect_channel() {
+    if let Some(dm_logs_webhook) = &data.webhooks.dm_logs {
+        if dm_logs_webhook.channel_id.try_unwrap()? != channel_id.expect_channel() {
+            return Ok(());
+        }
+    } else {
+        // No dm_logs webhook configured, skip processing
         return Ok(());
     }
 

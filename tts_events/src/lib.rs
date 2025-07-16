@@ -1,5 +1,4 @@
 #![allow(clippy::module_name_repetitions)]
-#![feature(let_chains)]
 
 mod channel;
 mod guild;
