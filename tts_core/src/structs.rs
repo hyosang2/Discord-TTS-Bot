@@ -248,6 +248,7 @@ pub struct Data {
     pub nickname_db: database::Handler<[i64; 2], database::NicknameRowRaw>,
     pub user_voice_db: database::Handler<(i64, TTSMode), database::UserVoiceRowRaw>,
     pub guild_voice_db: database::Handler<(i64, TTSMode), database::GuildVoiceRowRaw>,
+    pub user_opt_out_db: database::Handler<[i64; 2], database::UserOptOutRowRaw>,
 
     pub entitlement_cache: mini_moka::sync::Cache<UserId, CachedEntitlement>,
     pub join_vc_tokens: DashMap<GuildId, Arc<tokio::sync::Mutex<()>>>,

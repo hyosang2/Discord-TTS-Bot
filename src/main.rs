@@ -67,6 +67,7 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         user_voice_db,
         guild_voice_db,
         nickname_db,
+        user_opt_out_db,
         gtts_voices,
         espeak_voices,
         gcloud_voices,
@@ -81,6 +82,7 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         create_db_handler!(pool.clone(), "user_voice", "user_id", "mode"),
         create_db_handler!(pool.clone(), "guild_voice", "guild_id", "mode"),
         create_db_handler!(pool.clone(), "nicknames", "guild_id", "user_id"),
+        create_db_handler!(pool.clone(), "user_opt_out", "user_id", "guild_id"),
         fetch_voices_safe_gtts(&reqwest, tts_service(), auth_key),
         fetch_voices_safe_espeak(&reqwest, tts_service(), auth_key),
         fetch_voices_safe_gcloud(&reqwest, tts_service(), auth_key),
@@ -150,6 +152,7 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         nickname_db,
         user_voice_db,
         guild_voice_db,
+        user_opt_out_db,
     });
 
     let framework_options = poise::FrameworkOptions {

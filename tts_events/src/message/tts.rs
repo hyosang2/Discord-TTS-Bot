@@ -26,7 +26,7 @@ pub(crate) async fn process_tts_msg(
         data.userinfo_db.get(message.author.id.into()),
     )?;
 
-    let Some((mut content, to_autojoin)) = run_checks(ctx, message, &guild_row, *user_row)? else {
+    let Some((mut content, to_autojoin)) = run_checks(ctx, message, &guild_row, *user_row, data).await? else {
         return Ok(());
     };
 
@@ -216,13 +216,25 @@ pub(crate) async fn process_tts_msg(
     .map_err(Into::into)
 }
 
-fn run_checks(
+async fn run_checks(
     ctx: &serenity::Context,
     message: &serenity::Message,
     guild_row: &GuildRow,
     user_row: UserRow,
+    data: &Data,
 ) -> Result<Option<(String, Option<serenity::ChannelId>)>> {
     if user_row.bot_banned() {
+        return Ok(None);
+    }
+
+    // Check if user has opted out in this guild
+    let guild_id = message.guild_id.unwrap(); // Safe because this is only called with guild messages
+    let user_opt_out = data
+        .user_opt_out_db
+        .get([message.author.id.into(), guild_id.into()])
+        .await?;
+    
+    if user_opt_out.opted_out {
         return Ok(None);
     }
 

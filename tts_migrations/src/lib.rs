@@ -244,6 +244,22 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
         ALTER TABLE guild_voice
             ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd';
 
+        CREATE TABLE IF NOT EXISTS user_opt_out (
+            user_id   bigint,
+            guild_id  bigint,
+            opted_out bool DEFAULT true,
+
+            PRIMARY KEY (user_id, guild_id),
+
+            FOREIGN KEY       (user_id)
+            REFERENCES userinfo (user_id)
+            ON DELETE CASCADE,
+
+            FOREIGN KEY       (guild_id)
+            REFERENCES guilds (guild_id)
+            ON DELETE CASCADE
+        );
+
         -- The old table had a pkey on traceback, now we hash and pkey on that
         ALTER TABLE errors
             ADD COLUMN IF NOT EXISTS traceback_hash bytea;
@@ -257,6 +273,7 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
         INSERT INTO guild_voice (guild_id, mode, voice) VALUES(0, 'gtts', 'en') ON CONFLICT (guild_id, mode) DO NOTHING;
         INSERT INTO user_voice  (user_id, mode)         VALUES(0, 'openai')     ON CONFLICT (user_id, mode)  DO NOTHING;
         INSERT INTO guild_voice (guild_id, mode, voice) VALUES(0, 'openai', 'alloy') ON CONFLICT (guild_id, mode) DO NOTHING;
+        INSERT INTO user_opt_out (user_id, guild_id, opted_out) VALUES(0, 0, false) ON CONFLICT (user_id, guild_id) DO NOTHING;
     ").await?;
 
     migrate_single_to_modes(transaction, "userinfo", "user_voice", "voice", "user_id").await?;

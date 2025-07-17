@@ -1377,12 +1377,56 @@ async fn list_gcloud_voices(ctx: &Context<'_>) -> Result<(String, Vec<String>)> 
     Ok((format!("{lang} {variant} ({gender})"), pages))
 }
 
-pub fn commands() -> [Command; 5] {
+/// Opt out of TTS processing in this server
+#[poise::command(
+    category = "Settings",
+    guild_only,
+    prefix_command,
+    slash_command,
+    required_bot_permissions = "SEND_MESSAGES"
+)]
+pub async fn opt_out(ctx: Context<'_>, opted_out: bool) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
+    let data = ctx.data();
+
+    // Check if user is bot banned (global override)
+    let user_row = data.userinfo_db.get(user_id.into()).await?;
+    if user_row.bot_banned() {
+        ctx.send_error("You are globally banned from using this bot.").await?;
+        return Ok(());
+    }
+
+    // Set or remove opt-out status
+    if opted_out {
+        // Ensure user and guild exist in database before creating opt-out entry
+        tokio::try_join!(
+            data.userinfo_db.create_row(user_id.into()),
+            data.guilds_db.create_row(guild_id.into())
+        )?;
+        
+        data.user_opt_out_db
+            .set_one([user_id.into(), guild_id.into()], "opted_out", &true)
+            .await?;
+        ctx.say("✅ You have opted out of TTS processing in this server. Your messages will no longer be read aloud.").await?;
+    } else {
+        // Remove the opt-out entry (opting back in)
+        data.user_opt_out_db
+            .delete([user_id.into(), guild_id.into()])
+            .await?;
+        ctx.say("✅ You have opted back into TTS processing in this server. Your messages will be read aloud again.").await?;
+    }
+
+    Ok(())
+}
+
+pub fn commands() -> [Command; 6] {
     [
         settings(),
         setup::setup(),
         voices(),
         translation_languages(),
+        opt_out(),
         poise::Command {
             subcommands: vec![
                 poise::Command {
@@ -1410,6 +1454,7 @@ pub fn commands() -> [Command; 5] {
                 command_prefix(),
                 text_in_voice(),
                 skip_emoji(),
+                opt_out(),
                 owner::block(),
                 owner::bot_ban(),
                 owner::gtts_disabled(),

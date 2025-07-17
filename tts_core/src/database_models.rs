@@ -228,3 +228,17 @@ impl Compact for NicknameRowRaw {
         self
     }
 }
+
+#[derive(Debug, TypeSize, sqlx::FromRow)]
+pub struct UserOptOutRow {
+    pub opted_out: bool,
+}
+
+pub type UserOptOutRowRaw = UserOptOutRow;
+
+impl Compact for UserOptOutRowRaw {
+    type Compacted = UserOptOutRow;
+    fn compact(self) -> Self::Compacted {
+        self
+    }
+}
