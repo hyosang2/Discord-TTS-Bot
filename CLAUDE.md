@@ -6,6 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-workspace Cargo project with modular architecture. Currently configured for OpenAI TTS only - other TTS services (gTTS, eSpeak, Polly, gCloud) are temporarily disabled.
 
 ### Recent Updates
+- **User Opt-Out Feature**: Added per-server user privacy controls:
+  - Command: `/opt_out true/false` for per-server TTS processing control
+  - Database: New `user_opt_out` table with foreign key constraints
+  - Users can independently opt out of TTS processing on each server
+  - Bot-banned status overrides opt-out preferences
 - **OpenAI Model Selection**: Added support for switching between three OpenAI TTS models:
   - `tts-1`: Faster generation, lower quality
   - `tts-1-hd`: High definition audio (default)
@@ -63,9 +68,10 @@ Multi-crate workspace with specialized modules:
 ### Key Components
 - **Main Bot**: Entry point in `src/main.rs` using jemalloc allocator and tokio runtime
 - **Framework**: Poise framework for command handling with prefix and slash command support
-- **Voice**: Songbird integration for voice channel management and TTS playback
-- **Database**: PostgreSQL with sqlx for persistent storage (guilds, users, voice settings)
+- **Voice**: Songbird integration for voice channel management and TTS playbook
+- **Database**: PostgreSQL with sqlx for persistent storage (guilds, users, voice settings, opt-out preferences)
 - **TTS Integration**: OpenAI TTS API for text-to-speech synthesis (default mode)
+- **Privacy Controls**: Per-server user opt-out system with database-backed persistence
 - **Premium System**: Role-based premium features with subscription validation
 - **Analytics**: Background collection and processing of usage metrics
 - **Webhook Logging**: Discord webhook integration for error and event logging (optional)
@@ -88,6 +94,24 @@ Multi-crate workspace with specialized modules:
 - **Recovery mechanism**: Automatic detection of database/config state mismatches
 - **Transaction safety**: All migrations run in single transaction with post-validation
 - **Robustness**: Setup runs if config flag missing OR critical tables don't exist
+- **User opt-out table**: `user_opt_out` with foreign key constraints to `userinfo` and `guilds`
+
+## Privacy and User Controls
+
+### User Opt-Out System
+Implemented per-server user privacy controls in `tts_commands/src/settings/mod.rs:227`:
+
+- **Command**: `/opt_out true/false` allows users to control TTS processing per server
+- **Database**: `user_opt_out` table tracks preferences with composite primary key (user_id, guild_id)
+- **Foreign Key Safety**: Ensures userinfo and guilds records exist before creating opt-out entries
+- **Message Processing**: `tts_events/src/message/tts.rs:24` checks opt-out status before TTS processing
+- **Override Behavior**: Bot-banned users are excluded regardless of opt-out preferences
+
+### Implementation Details
+- **Database Handler**: `user_opt_out_db` in Data struct for caching and performance
+- **Foreign Key Fix**: `tokio::try_join!` ensures parent records exist before opt-out insertion
+- **Default Behavior**: Users are opted-in by default (no record = participation)
+- **Per-Server Granularity**: Users can have different opt-out settings across servers
 
 ## TODO / Roadmap
 

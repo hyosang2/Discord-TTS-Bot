@@ -14,6 +14,7 @@ A powerful, self-hostable Text-to-Speech Discord bot with support for multiple T
 - **💬 Discord Integration**: Seamless voice channel integration with slash commands and prefix commands
 - **🌐 Multi-Server Support**: Works across multiple Discord servers with independent configurations
 - **🔧 Flexible Configuration**: Per-server and per-user voice settings, customizable prefixes, and more
+- **🔒 Privacy Controls**: Per-server user opt-out functionality for users who don't want their messages processed
 
 **Note**: Other TTS engines (gTTS, eSpeak, Amazon Polly, Google Cloud TTS) are temporarily disabled in this configuration.
 
@@ -311,7 +312,13 @@ Once configured and running:
    /settings                   # View current settings including OpenAI model
    ```
 
-3. **OpenAI Model Selection (NEW):**
+3. **Privacy Controls:**
+   ```
+   /opt_out true               # Opt out of TTS processing in this server
+   /opt_out false              # Opt back into TTS processing in this server
+   ```
+
+4. **OpenAI Model Selection (NEW):**
    ```
    /set openai_model tts-1              # Fast generation, lower quality
    /set openai_model tts-1-hd            # High quality (default)
@@ -319,7 +326,18 @@ Once configured and running:
    /set openai_model                    # Reset to default (tts-1-hd)
    ```
 
-4. **Type in setup channel** - Messages will be read aloud in voice channel
+5. **Type in setup channel** - Messages will be read aloud in voice channel
+
+## Privacy & User Controls
+
+The bot includes comprehensive privacy controls for users who do not wish their messages to be processed:
+
+- **Per-Server Opt-Out**: Users can opt out of TTS processing on a per-server basis using `/opt_out true`
+- **Global Bot Ban**: Server owners can request global bans for users who violate terms of service
+- **No Data Retention**: Messages are processed in real-time and not stored
+- **OpenAI Processing**: When using OpenAI TTS, messages are sent to OpenAI's API for voice synthesis
+
+**Important**: Users concerned about their messages being processed by OpenAI for TTS generation should use the `/opt_out true` command to exclude themselves from TTS processing in specific servers.
 
 ## Troubleshooting
 
