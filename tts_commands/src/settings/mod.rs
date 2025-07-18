@@ -205,7 +205,7 @@ pub async fn settings(ctx: Context<'_>) -> CommandResult {
 {sep3} Voice: `{user_voice}`
 {sep3} Voice Mode: `{voice_mode}`
 {sep3} OpenAI Model: `{openai_model}`
-{sep3} OpenAI Instruction: `{openai_instruction}`
+{sep3} TTS Instruction: `{openai_instruction}`
 {sep3} Nickname: `{nickname}`
 {sep3} Speaking Rate: `{speaking_rate}{speaking_rate_kind}`
         "),
@@ -232,17 +232,17 @@ async fn voice_autocomplete<'a>(
     };
 
     let openai_voices = [
-        ("alloy".to_string(), "Alloy (Neutral, balanced)".to_string()),
-        ("ash".to_string(), "Ash (Expressive, steady)".to_string()),
-        ("ballad".to_string(), "Ballad (Soft, emotional)".to_string()),
-        ("coral".to_string(), "Coral (Warm, friendly)".to_string()),
-        ("echo".to_string(), "Echo (Clear, resonant)".to_string()),
-        ("fable".to_string(), "Fable (Storytelling, engaging)".to_string()),
-        ("nova".to_string(), "Nova (Bright, energetic)".to_string()),
-        ("onyx".to_string(), "Onyx (Deep, authoritative)".to_string()),
-        ("sage".to_string(), "Sage (Calm, thoughtful)".to_string()),
-        ("shimmer".to_string(), "Shimmer (Light, cheerful)".to_string()),
-        ("verse".to_string(), "Verse (Expressive, poetic)".to_string()),
+        ("Alloy (Neutral, balanced)".to_string(), "alloy".to_string()),
+        ("Ash (Expressive, steady)".to_string(), "ash".to_string()),
+        ("Ballad (Soft, emotional)".to_string(), "ballad".to_string()),
+        ("Coral (Warm, friendly)".to_string(), "coral".to_string()),
+        ("Echo (Clear, resonant)".to_string(), "echo".to_string()),
+        ("Fable (Storytelling, engaging)".to_string(), "fable".to_string()),
+        ("Nova (Bright, energetic)".to_string(), "nova".to_string()),
+        ("Onyx (Deep, authoritative)".to_string(), "onyx".to_string()),
+        ("Sage (Calm, thoughtful)".to_string(), "sage".to_string()),
+        ("Shimmer (Light, cheerful)".to_string(), "shimmer".to_string()),
+        ("Verse (Expressive, poetic)".to_string(), "verse".to_string()),
     ];
 
     let voices: &mut dyn Iterator<Item = _> = match mode {
@@ -435,7 +435,10 @@ fn check_valid_voice(data: &Data, code: &FixedString<u8>, mode: TTSMode) -> bool
             .split_once(' ')
             .and_then(|(language, variant)| data.gcloud_voices.get(language).map(|l| (l, variant)))
             .is_some_and(|(ls, v)| ls.contains_key(v)),
-        TTSMode::OpenAI => matches!(code.to_lowercase().as_str(), "alloy" | "ash" | "ballad" | "coral" | "echo" | "fable" | "onyx" | "nova" | "sage" | "shimmer" | "verse"),
+        TTSMode::OpenAI => {
+            let lowercase_code = code.to_lowercase();
+            matches!(lowercase_code.as_str(), "alloy" | "ash" | "ballad" | "coral" | "echo" | "fable" | "onyx" | "nova" | "sage" | "shimmer" | "verse")
+        },
     }
 }
 
@@ -1134,7 +1137,7 @@ pub async fn openai_model(
     
     // Check if user has premium voice mode set
     let user_row = data.userinfo_db.get(ctx.author().id.into()).await?;
-    let is_premium_mode = if guild_is_premium {
+    let _is_premium_mode = if guild_is_premium {
         user_row.premium_voice_mode.is_some()
     } else {
         false
@@ -1170,9 +1173,9 @@ pub async fn openai_model(
     // defer_response,
     category = "Settings"
 )]
-pub async fn openai_instruction(
+pub async fn instruction(
     ctx: Context<'_>,
-    #[description = "The instruction for OpenAI TTS speech style (max 500 chars), leave blank to clear"] instruction: Option<String>,
+    #[description = "The instruction for TTS speech style (max 500 chars), leave blank to clear"] instruction: Option<String>,
 ) -> CommandResult {
     let data = ctx.data();
     let guild_id = ctx.guild_id().unwrap();
@@ -1183,7 +1186,7 @@ pub async fn openai_instruction(
         .await?;
 
     if current_mode != TTSMode::OpenAI {
-        ctx.say("You need to set your TTS mode to OpenAI first using `/set mode OpenAI TTS (high quality)` before setting OpenAI instructions.").await?;
+        ctx.say("You need to set your TTS mode to OpenAI first using `/set mode OpenAI TTS (high quality)` before setting TTS instructions.").await?;
         return Ok(());
     }
 
@@ -1214,9 +1217,9 @@ pub async fn openai_instruction(
         .await?;
 
     if let Some(instruction) = instruction_message {
-        ctx.say(&format!("Set your OpenAI TTS instruction to: \"{}\"", instruction)).await?;
+        ctx.say(&format!("Set your TTS instruction to: \"{}\"", instruction)).await?;
     } else {
-        ctx.say("Cleared your OpenAI TTS instruction").await?;
+        ctx.say("Cleared your TTS instruction").await?;
     };
     Ok(())
 }
@@ -1518,7 +1521,7 @@ pub fn commands() -> [Command; 6] {
                 mode(),
                 server_mode(),
                 openai_model(),
-                openai_instruction(),
+                instruction(),
                 msg_length(),
                 botignore(),
                 translation(),

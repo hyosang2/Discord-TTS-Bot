@@ -8,7 +8,7 @@ use tts_core::{
     database::{GuildRow, UserRow},
     errors,
     opt_ext::OptionTryUnwrap as _,
-    structs::{Data, IsPremium, JoinVCToken, OpenAIModel, Result, TTSMode},
+    structs::{Data, IsPremium, JoinVCToken, Result, TTSMode},
     traits::SongbirdManagerExt as _,
 };
 

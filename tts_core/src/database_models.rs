@@ -239,7 +239,7 @@ impl Compact for NicknameRowRaw {
     }
 }
 
-#[derive(Debug, TypeSize, sqlx::FromRow)]
+#[derive(Debug, TypeSize, sqlx::FromRow, Copy, Clone)]
 pub struct UserOptOutRow {
     pub opted_out: bool,
 }

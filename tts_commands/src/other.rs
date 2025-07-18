@@ -15,7 +15,7 @@ use tts_core::{
     constants::OPTION_SEPERATORS,
     opt_ext::OptionTryUnwrap,
     require_guild,
-    structs::{ApplicationContext, Command, CommandResult, Context, IsPremium, OpenAIModel, TTSMode},
+    structs::{ApplicationContext, Command, CommandResult, Context, IsPremium, TTSMode},
     traits::PoiseContextExt as _,
 };
 

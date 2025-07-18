@@ -557,8 +557,8 @@ impl TTSMode {
     #[must_use]
     pub const fn is_premium(self) -> bool {
         match self {
-            Self::gTTS | Self::eSpeak => false,
-            Self::Polly | Self::gCloud | Self::OpenAI => true,
+            Self::gTTS | Self::eSpeak | Self::OpenAI => false,
+            Self::Polly | Self::gCloud => true,
         }
     }
 

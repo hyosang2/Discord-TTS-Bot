@@ -7,7 +7,7 @@ Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-works
 
 ### Recent Updates
 - **OpenAI Speech Style Instructions**: Added support for controlling TTS speaking style with natural language instructions:
-  - Command: `/set openai_instruction [instruction]` for persistent user-level instructions
+  - Command: `/set instruction [instruction]` for persistent user-level instructions
   - Temporary per-message instructions: `\instruction text` (single word) or `[instruction] text` (multi-word)
   - Works only with `gpt-4o-mini-tts` model (instructions ignored for tts-1 and tts-1-hd)
   - Database: Added `openai_instruction` column (varchar(500)) to `user_voice` and `guild_voice` tables
@@ -46,21 +46,44 @@ Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-works
 - **Database migration**: Now handled automatically with enhanced recovery mechanisms
 - **Docker**: Use `host = "database"` in PostgreSQL config (not `localhost`)
 
-### Docker Development
-- `docker compose up --build -d` - Build and run containers
-- `docker compose logs bot` - View bot logs
-- Note: TTS service is temporarily disabled in docker-compose.yml
+### Docker Development Commands
 
-### Common Docker Issues
-- **"relation 'guilds' does not exist"**: ✅ **RESOLVED - Permanent Fix Implemented**
-  - **Root cause identified**: Missing persistent PostgreSQL volumes + setup flag mismatch
-  - **Permanent fixes applied**:
+#### Building and Running
+- `docker compose build bot` - Build bot container only (faster for code changes)
+- `docker compose up --build -d` - Build and run all containers in background
+- `docker compose up -d` - Start containers without rebuilding (if already built)
+- `docker compose down` - Stop and remove containers
+- `docker compose down -v` - Stop containers and remove volumes (complete reset)
+
+#### Monitoring and Debugging
+- `docker compose logs bot` - View bot logs (one-time)
+- `docker compose logs bot -f` - Follow bot logs in real-time
+- `docker compose logs bot -f --tail=50` - Show last 50 lines and follow
+- `docker compose ps` - Show container status
+- `docker compose exec bot sh` - Access bot container shell
+
+#### Development Workflow
+1. **Make code changes**
+2. **Rebuild bot container**: `docker compose build bot`
+3. **Restart bot**: `docker compose up -d bot`
+4. **Check logs**: `docker compose logs bot -f`
+
+#### Troubleshooting Commands
+- **Check container health**: `docker compose ps`
+- **Database issues**: `docker compose logs database`
+- **Full restart**: `docker compose restart`
+- **Clean rebuild**: `docker compose down && docker compose up --build -d`
+
+### ✅ Docker Database Issues (RESOLVED)
+- **"relation 'guilds' does not exist"**: **PERMANENTLY FIXED**
+  - **Root cause**: Missing persistent PostgreSQL volumes + setup flag mismatch
+  - **Fixes implemented**:
     - Added persistent volume (`postgres_data`) to `docker-compose.yml`
     - Enhanced migration logic with table existence validation in `tts_migrations/src/lib.rs`
     - Fixed database host configuration in `config-docker.toml` (`database` not `localhost`)
     - Added post-migration validation and automatic recovery mechanisms
   - **Result**: Database data persists across container restarts, automatic self-healing
-  - **Emergency reset** (if needed): `sudo docker compose down -v && sudo docker compose up --build -d`
+  - **Emergency reset** (rarely needed): `docker compose down -v && docker compose up --build -d`
 
 ## Architecture
 
@@ -128,15 +151,16 @@ Added comprehensive support for controlling OpenAI TTS speaking style and tone u
 - **Instruction Parsing**: `parse_instruction()` function supports two formats:
   - Single word: `\instruction text` (e.g., `\happy Hello world!`)
   - Multi-word: `[instruction] text` (e.g., `[speak like a narrator] Once upon a time...`)
-- **Command Interface**: `/set openai_instruction [instruction]` in `tts_commands/src/settings/mod.rs:1173`
-- **Database Storage**: `openai_instruction` column (varchar(500)) in `user_voice` and `guild_voice` tables
+- **Command Interface**: `/set instruction [instruction]` in `tts_commands/src/settings/mod.rs:1173`
+- **Database Storage**: `openai_instruction` column (varchar(500)) in `user_voice` table (per-user storage)
+- **Scope**: Instructions are stored per-user, not per-guild - each user has their own persistent instruction
 - **API Integration**: Updated `fetch_openai_audio()` to use async-openai 0.29 instructions parameter
 - **Model Compatibility**: Instructions only work with `gpt-4o-mini-tts` model (ignored for tts-1/tts-1-hd)
 
 ### Fallback Logic
 Instruction selection follows priority order in `tts_events/src/message/tts.rs:159`:
 1. **Temporary instruction**: Parsed from message content (highest priority)
-2. **User-level instruction**: Persistent setting via `/set openai_instruction`
+2. **User-level instruction**: Persistent setting via `/set instruction`
 3. **Guild-level instruction**: Server-wide default (future feature)
 4. **None**: No instruction applied
 
@@ -160,11 +184,17 @@ Instruction selection follows priority order in `tts_events/src/message/tts.rs:1
 ### Recently Completed
 - [x] **OpenAI Speech Style Instructions** - ✅ **COMPLETED**: Added support for controlling TTS speaking style
   - [x] Temporary per-message instructions: `\instruction text` and `[instruction] text`
-  - [x] Persistent user-level instructions via `/set openai_instruction`
+  - [x] Persistent user-level instructions via `/set instruction`
   - [x] Database storage with 500-character limit
   - [x] Integration with OpenAI TTS API (gpt-4o-mini-tts model only)
   - [x] Fallback logic: temporary → user-level → guild-level → none
   - [x] Updated async-openai dependency to 0.29 for instructions parameter support
+
+- [x] **OpenAI Voice Command Fix** - ✅ **COMPLETED**: Fixed "Invalid voice" errors
+  - [x] Changed OpenAI TTS from premium to non-premium mode in `tts_core/src/structs.rs`
+  - [x] Users now need to set TTS mode first: `/set mode OpenAI TTS (high quality)`
+  - [x] Then set voice: `/set voice alloy` (or any OpenAI voice)
+  - [x] Fixed compilation errors and container build issues
 
 ### High Priority
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions

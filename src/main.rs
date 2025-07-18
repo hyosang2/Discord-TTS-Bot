@@ -74,7 +74,6 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         polly_voices,
         translation_languages,
         shard_count,
-        premium_user,
     ) = tokio::try_join!(
         get_webhooks(&http, config.webhooks),
         create_db_handler!(pool.clone(), "guilds", "guild_id"),
@@ -89,15 +88,17 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         fetch_voices_safe_polly(&reqwest, tts_service(), auth_key),
         fetch_translation_languages(&reqwest, tts_service(), auth_key),
         async { Ok(http.get_bot_gateway().await?.shards) },
-        async {
-            let res = serenity::UserId::new(802632257658683442)
-                .to_user(&http)
-                .await?;
-
-            println!("Loaded premium user");
-            Ok(res)
-        }
     )?;
+
+    // Load premium user separately (failure is okay for self-hosted)
+    let premium_user = serenity::UserId::new(802632257658683442)
+        .to_user(&http)
+        .await;
+    
+    match &premium_user {
+        std::result::Result::Ok(_) => println!("Loaded premium user"),
+        std::result::Result::Err(e) => println!("Failed to load premium user (this is okay for self-hosted): {}", e),
+    }
 
     println!("Setting up webhook logging");
     tts_tasks::logging::WebhookLogger::init(
@@ -141,7 +142,9 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         premium_config: config.premium,
         website_info: Mutex::new(config.website_info),
         reqwest,
-        premium_avatar_url: FixedString::from_string_trunc(premium_user.face()),
+        premium_avatar_url: FixedString::from_string_trunc(
+            premium_user.as_ref().map(|u| u.face()).unwrap_or_else(|_| "".to_string())
+        ),
         analytics,
         webhooks,
         start_time,

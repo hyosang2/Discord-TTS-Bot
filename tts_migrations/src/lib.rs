@@ -5,7 +5,7 @@ use sqlx::{Connection as _, Executor, Row};
 use tts_core::{
     constants::DB_SETUP_QUERY,
     opt_ext::OptionTryUnwrap,
-    structs::{Config, OpenAIModel, PostgresConfig, Result, TTSMode},
+    structs::{Config, PostgresConfig, Result, TTSMode},
 };
 
 type Transaction<'a> = sqlx::Transaction<'a, sqlx::Postgres>;

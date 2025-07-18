@@ -13,7 +13,7 @@ A powerful, self-hostable Text-to-Speech Discord bot with support for multiple T
   - **NEW: Speech Style Instructions**: Control speaking style and tone with natural language instructions
     - Works with `gpt-4o-mini-tts` model only
     - Temporary per-message instructions: `\happy Hello world!` or `[speak like a narrator] Once upon a time...`
-    - Persistent user-level instructions via `/set openai_instruction`
+    - Persistent user-level instructions via `/set instruction`
 - **🎛️ Voice Customization**: Configurable speaking rates (0.25x-4.0x), voice selection, and per-user settings
 - **💬 Discord Integration**: Seamless voice channel integration with slash commands and prefix commands
 - **🌐 Multi-Server Support**: Works across multiple Discord servers with independent configurations
@@ -238,9 +238,13 @@ stats_key = "your_stats_key"
 
 3. **Use OpenAI TTS:**
    ```
-   /set voice alloy          # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
-   /speaking_rate 1.5        # Adjust speed (0.25x to 4.0x)
-   /voices                   # List all available voices
+   # First set your TTS mode to OpenAI
+   /set mode OpenAI TTS (high quality)   # Required first
+   
+   # Then configure voice settings
+   /set voice alloy                      # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
+   /speaking_rate 1.5                    # Adjust speed (0.25x to 4.0x)
+   /voices                               # List all available voices
    ```
 
 ## Discord Bot Setup
@@ -309,12 +313,16 @@ Once configured and running:
 
 2. **TTS Commands:**
    ```
-   /set voice alloy            # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
-   /set openai_model           # Choose OpenAI model (tts-1, tts-1-hd, gpt-4o-mini-tts)
-   /set openai_instruction     # Set persistent speaking style instructions (gpt-4o-mini-tts only)
-   /speaking_rate 1.2          # Adjust speed (0.25x to 4.0x)
-   /voices                     # List all available voices
-   /settings                   # View current settings including OpenAI model and instructions
+   # First set your TTS mode to OpenAI
+   /set mode OpenAI TTS (high quality)     # Required before setting OpenAI voices
+   
+   # Then configure OpenAI settings
+   /set voice alloy                        # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
+   /set openai_model tts-1-hd              # Choose OpenAI model (tts-1, tts-1-hd, gpt-4o-mini-tts)
+   /set instruction                        # Set persistent speaking style instructions (gpt-4o-mini-tts only)
+   /speaking_rate 1.2                      # Adjust speed (0.25x to 4.0x)
+   /voices                                 # List all available voices
+   /settings                               # View current settings including OpenAI model and instructions
    ```
 
 3. **Privacy Controls:**
@@ -334,8 +342,8 @@ Once configured and running:
 5. **Speech Style Instructions (NEW):**
    ```
    # Persistent instructions (saved to your profile)
-   /set openai_instruction speak like a narrator    # Set speaking style
-   /set openai_instruction                          # Clear instructions
+   /set instruction speak like a narrator          # Set speaking style
+   /set instruction                                # Clear instructions
    
    # Temporary per-message instructions (only for gpt-4o-mini-tts)
    \happy Hello everyone!                           # Single word instruction
