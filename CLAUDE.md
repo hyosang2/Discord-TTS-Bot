@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-workspace Cargo project with modular architecture. Currently configured for OpenAI TTS only - other TTS services (gTTS, eSpeak, Polly, gCloud) are temporarily disabled.
 
 ### Recent Updates
+- **OpenAI Speech Style Instructions**: Added support for controlling TTS speaking style with natural language instructions:
+  - Command: `/set openai_instruction [instruction]` for persistent user-level instructions
+  - Temporary per-message instructions: `\instruction text` (single word) or `[instruction] text` (multi-word)
+  - Works only with `gpt-4o-mini-tts` model (instructions ignored for tts-1 and tts-1-hd)
+  - Database: Added `openai_instruction` column (varchar(500)) to `user_voice` and `guild_voice` tables
+  - Fallback logic: temporary instruction → user-level instruction → guild-level instruction → none
+  - Dependencies: Updated async-openai from 0.25 to 0.29 for instructions parameter support
 - **User Opt-Out Feature**: Added per-server user privacy controls:
   - Command: `/opt_out true/false` for per-server TTS processing control
   - Database: New `user_opt_out` table with foreign key constraints
@@ -69,8 +76,8 @@ Multi-crate workspace with specialized modules:
 - **Main Bot**: Entry point in `src/main.rs` using jemalloc allocator and tokio runtime
 - **Framework**: Poise framework for command handling with prefix and slash command support
 - **Voice**: Songbird integration for voice channel management and TTS playbook
-- **Database**: PostgreSQL with sqlx for persistent storage (guilds, users, voice settings, opt-out preferences)
-- **TTS Integration**: OpenAI TTS API for text-to-speech synthesis (default mode)
+- **Database**: PostgreSQL with sqlx for persistent storage (guilds, users, voice settings, opt-out preferences, instruction settings)
+- **TTS Integration**: OpenAI TTS API for text-to-speech synthesis (default mode) with instruction support
 - **Privacy Controls**: Per-server user opt-out system with database-backed persistence
 - **Premium System**: Role-based premium features with subscription validation
 - **Analytics**: Background collection and processing of usage metrics
@@ -113,7 +120,51 @@ Implemented per-server user privacy controls in `tts_commands/src/settings/mod.r
 - **Default Behavior**: Users are opted-in by default (no record = participation)
 - **Per-Server Granularity**: Users can have different opt-out settings across servers
 
+## OpenAI Instructions System
+
+### Speech Style Instructions Implementation
+Added comprehensive support for controlling OpenAI TTS speaking style and tone using natural language instructions in `tts_core/src/common.rs:94` and `tts_events/src/message/tts.rs:20`:
+
+- **Instruction Parsing**: `parse_instruction()` function supports two formats:
+  - Single word: `\instruction text` (e.g., `\happy Hello world!`)
+  - Multi-word: `[instruction] text` (e.g., `[speak like a narrator] Once upon a time...`)
+- **Command Interface**: `/set openai_instruction [instruction]` in `tts_commands/src/settings/mod.rs:1173`
+- **Database Storage**: `openai_instruction` column (varchar(500)) in `user_voice` and `guild_voice` tables
+- **API Integration**: Updated `fetch_openai_audio()` to use async-openai 0.29 instructions parameter
+- **Model Compatibility**: Instructions only work with `gpt-4o-mini-tts` model (ignored for tts-1/tts-1-hd)
+
+### Fallback Logic
+Instruction selection follows priority order in `tts_events/src/message/tts.rs:159`:
+1. **Temporary instruction**: Parsed from message content (highest priority)
+2. **User-level instruction**: Persistent setting via `/set openai_instruction`
+3. **Guild-level instruction**: Server-wide default (future feature)
+4. **None**: No instruction applied
+
+### Technical Implementation
+- **Dependencies**: Updated `async-openai` from 0.25 to 0.29 for instructions parameter support
+- **Request Building**: Conditional request building in `fetch_openai_audio()` to add instructions only for compatible models
+- **Validation**: 500-character limit on instruction length with user-friendly error messages
+- **Settings Display**: Instructions shown in `/settings` command output when set
+- **Database Migration**: Automatic schema updates add `openai_instruction` columns to existing tables
+
+### Key Files Modified
+- `tts_core/src/common.rs`: OpenAI API integration with instructions parameter
+- `tts_events/src/message/tts.rs`: Message parsing and instruction extraction
+- `tts_commands/src/settings/mod.rs`: Command interface and database operations
+- `tts_core/src/database_models.rs`: Database schema updates for instruction storage
+- `tts_migrations/src/lib.rs`: Database migration for new instruction columns
+- `Cargo.toml`: Updated async-openai dependency to 0.29
+
 ## TODO / Roadmap
+
+### Recently Completed
+- [x] **OpenAI Speech Style Instructions** - ✅ **COMPLETED**: Added support for controlling TTS speaking style
+  - [x] Temporary per-message instructions: `\instruction text` and `[instruction] text`
+  - [x] Persistent user-level instructions via `/set openai_instruction`
+  - [x] Database storage with 500-character limit
+  - [x] Integration with OpenAI TTS API (gpt-4o-mini-tts model only)
+  - [x] Fallback logic: temporary → user-level → guild-level → none
+  - [x] Updated async-openai dependency to 0.29 for instructions parameter support
 
 ### High Priority
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions

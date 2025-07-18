@@ -160,6 +160,7 @@ pub struct GuildVoiceRowRaw {
     pub mode: TTSMode,
     pub voice: String,
     pub openai_model: Option<OpenAIModel>,
+    pub openai_instruction: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, TypeSize)]
@@ -168,6 +169,7 @@ pub struct GuildVoiceRow {
     pub mode: TTSMode,
     pub voice: ArrayString<MAX_VOICE_LENGTH>,
     pub openai_model: Option<OpenAIModel>,
+    pub openai_instruction: Option<ArrayString<500>>,
 }
 
 impl Compact for GuildVoiceRowRaw {
@@ -178,6 +180,9 @@ impl Compact for GuildVoiceRowRaw {
             mode: self.mode,
             voice: truncate_convert(self.voice, "guildvoicerow.voice"),
             openai_model: self.openai_model,
+            openai_instruction: self
+                .openai_instruction
+                .map(|i| truncate_convert(i, "guildvoicerow.openai_instruction")),
         }
     }
 }
@@ -189,6 +194,7 @@ pub struct UserVoiceRowRaw {
     pub voice: Option<String>,
     pub speaking_rate: Option<f32>,
     pub openai_model: Option<OpenAIModel>,
+    pub openai_instruction: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, TypeSize)]
@@ -198,6 +204,7 @@ pub struct UserVoiceRow {
     pub voice: Option<ArrayString<MAX_VOICE_LENGTH>>,
     pub speaking_rate: Option<f32>,
     pub openai_model: Option<OpenAIModel>,
+    pub openai_instruction: Option<ArrayString<500>>,
 }
 
 impl Compact for UserVoiceRowRaw {
@@ -211,6 +218,9 @@ impl Compact for UserVoiceRowRaw {
                 .map(|v| truncate_convert(v, "uservoicerow.voice")),
             speaking_rate: self.speaking_rate,
             openai_model: self.openai_model,
+            openai_instruction: self
+                .openai_instruction
+                .map(|i| truncate_convert(i, "uservoicerow.openai_instruction")),
         }
     }
 }

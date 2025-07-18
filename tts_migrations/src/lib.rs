@@ -240,9 +240,11 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
             ADD COLUMN IF NOT EXISTS skip_emoji       bool       DEFAULT False;
         ALTER TABLE user_voice
             ADD COLUMN IF NOT EXISTS speaking_rate real,
-            ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd';
+            ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd',
+            ADD COLUMN IF NOT EXISTS openai_instruction varchar(500);
         ALTER TABLE guild_voice
-            ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd';
+            ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd',
+            ADD COLUMN IF NOT EXISTS openai_instruction varchar(500);
 
         CREATE TABLE IF NOT EXISTS user_opt_out (
             user_id   bigint,

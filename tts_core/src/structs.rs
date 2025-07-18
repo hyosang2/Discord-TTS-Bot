@@ -421,7 +421,7 @@ impl Data {
         http: &serenity::Http,
         author_id: UserId,
         guild_id: Option<GuildId>,
-    ) -> Result<(Cow<'static, str>, TTSMode, OpenAIModel)> {
+    ) -> Result<(Cow<'static, str>, TTSMode, OpenAIModel, Option<String>)> {
         let info = if let Some(guild_id) = guild_id {
             Some((guild_id, self.is_premium_simple(http, guild_id).await?))
         } else {
@@ -435,7 +435,7 @@ impl Data {
         &self,
         author_id: UserId,
         guild_info: Option<(GuildId, bool)>,
-    ) -> Result<(Cow<'static, str>, TTSMode, OpenAIModel)> {
+    ) -> Result<(Cow<'static, str>, TTSMode, OpenAIModel, Option<String>)> {
         let user_row = self.userinfo_db.get(author_id.into()).await?;
         let (guild_id, guild_is_premium) = match guild_info {
             Some((id, p)) => (Some(id), p),
@@ -488,28 +488,30 @@ impl Data {
         }
 
         let user_voice_row = self.user_voice_db.get((author_id.into(), mode)).await?;
-        let (voice, openai_model) =
+        let (voice, openai_model, instruction) =
             // Get user voice for user mode
             if user_voice_row.user_id.is_some() {
                 let voice = user_voice_row.voice.map(|v| Cow::Owned(v.as_str().to_owned()));
                 let openai_model = user_voice_row.openai_model.unwrap_or_default();
-                (voice, openai_model)
+                let instruction = user_voice_row.openai_instruction.map(|i| i.as_str().to_owned());
+                (voice, openai_model, instruction)
             } else if let Some(guild_id) = guild_id {
                 // Get default server voice for user mode
                 let guild_voice_row = self.guild_voice_db.get((guild_id.into(), mode)).await?;
                 if guild_voice_row.guild_id.is_some() {
                     let voice = Some(Cow::Owned(guild_voice_row.voice.as_str().to_owned()));
                     let openai_model = guild_voice_row.openai_model.unwrap_or_default();
-                    (voice, openai_model)
+                    let instruction = guild_voice_row.openai_instruction.map(|i| i.as_str().to_owned());
+                    (voice, openai_model, instruction)
                 } else {
-                    (None, OpenAIModel::default())
+                    (None, OpenAIModel::default(), None)
                 }
             } else {
-                (None, OpenAIModel::default())
+                (None, OpenAIModel::default(), None)
             };
 
         let voice = voice.unwrap_or_else(|| Cow::Borrowed(mode.default_voice()));
-        Ok((voice, mode, openai_model))
+        Ok((voice, mode, openai_model, instruction))
     }
 }
 

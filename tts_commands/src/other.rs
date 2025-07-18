@@ -103,7 +103,7 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
             None
         };
 
-        let (voice, mode, openai_model) = data
+        let (voice, mode, openai_model, _) = data
             .parse_user_or_guild_with_premium(author.id, guild_info)
             .await?;
 
@@ -131,7 +131,7 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
                 };
 
                 let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
-                match fetch_openai_audio(openai_api_key, message, &voice, speaking_rate_f32, openai_model).await? {
+                match fetch_openai_audio(openai_api_key, message, &voice, speaking_rate_f32, openai_model, None).await? {
                     Some(bytes) => bytes,
                     None => {
                         ctx.say("Failed to generate TTS audio with OpenAI").await?;

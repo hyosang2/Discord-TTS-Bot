@@ -12,6 +12,37 @@ use tts_core::{
     traits::SongbirdManagerExt as _,
 };
 
+/// Parses temporary instructions from message content.
+/// Returns (instruction, cleaned_content) tuple.
+/// Supports two formats:
+/// - `\instruction text` (single word)
+/// - `[instruction] text` (multi-word)
+fn parse_instruction(content: &str) -> (Option<String>, String) {
+    // Pattern 1: \instruction text
+    if let Some(stripped) = content.strip_prefix('\\') {
+        if let Some(space_idx) = stripped.find(' ') {
+            let instruction = stripped[..space_idx].trim().to_string();
+            let remaining = stripped[space_idx + 1..].trim().to_string();
+            if !instruction.is_empty() && !remaining.is_empty() {
+                return (Some(instruction), remaining);
+            }
+        }
+    }
+    
+    // Pattern 2: [instruction] text
+    if content.starts_with('[') {
+        if let Some(end_idx) = content.find(']') {
+            let instruction = content[1..end_idx].trim().to_string();
+            let remaining = content[end_idx + 1..].trim().to_string();
+            if !instruction.is_empty() && !remaining.is_empty() {
+                return (Some(instruction), remaining);
+            }
+        }
+    }
+    
+    (None, content.to_string())
+}
+
 pub(crate) async fn process_tts_msg(
     ctx: &serenity::Context,
     message: &serenity::Message,
@@ -26,12 +57,12 @@ pub(crate) async fn process_tts_msg(
         data.userinfo_db.get(message.author.id.into()),
     )?;
 
-    let Some((mut content, to_autojoin)) = run_checks(ctx, message, &guild_row, *user_row, data).await? else {
+    let Some((mut content, to_autojoin, temp_instruction)) = run_checks(ctx, message, &guild_row, *user_row, data).await? else {
         return Ok(());
     };
 
     let is_premium = data.is_premium_simple(&ctx.http, guild_id).await?;
-    let (voice, mode, openai_model) = {
+    let (voice, mode, openai_model, persistent_instruction) = {
         if let Some(channel_id) = to_autojoin {
             let join_vc_lock = JoinVCToken::acquire(data, guild_id);
             match data.songbird.join_vc(join_vc_lock, channel_id).await {
@@ -55,7 +86,7 @@ pub(crate) async fn process_tts_msg(
             None => None,
         };
 
-        let (voice, mode, openai_model) = data
+        let (voice, mode, openai_model, persistent_instruction) = data
             .parse_user_or_guild_with_premium(message.author.id, Some((guild_id, is_premium)))
             .await?;
 
@@ -81,7 +112,7 @@ pub(crate) async fn process_tts_msg(
             &data.last_to_xsaid_tracker,
         );
 
-        (voice, mode, openai_model)
+        (voice, mode, openai_model, persistent_instruction)
     };
 
     // Final check, make sure we aren't sending an empty message or just symbols.
@@ -124,8 +155,11 @@ pub(crate) async fn process_tts_msg(
                 return Ok(());
             };
 
+            // Determine instruction with fallback logic: temporary -> persistent -> none
+            let instruction = temp_instruction.as_deref().or(persistent_instruction.as_deref());
+
             let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
-            match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32, openai_model).await? {
+            match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32, openai_model, instruction).await? {
                 Some(bytes) => {
                     // Create input from bytes directly
                     Some(songbird::input::Input::from(bytes))
@@ -222,7 +256,7 @@ async fn run_checks(
     guild_row: &GuildRow,
     user_row: UserRow,
     data: &Data,
-) -> Result<Option<(String, Option<serenity::ChannelId>)>> {
+) -> Result<Option<(String, Option<serenity::ChannelId>, Option<String>)>> {
     if user_row.bot_banned() {
         return Ok(None);
     }
@@ -290,7 +324,9 @@ async fn run_checks(
         return Ok(None);
     }
 
-    content = content.to_lowercase();
+    // Parse temporary instruction before converting to lowercase
+    let (temp_instruction, cleaned_content) = parse_instruction(&content);
+    content = cleaned_content.to_lowercase();
 
     if let Some(required_prefix) = &guild_row.required_prefix {
         if let Some(stripped_content) = content.strip_prefix(required_prefix.as_str()) {
@@ -343,5 +379,5 @@ async fn run_checks(
         }
     }
 
-    Ok(Some((content, to_autojoin)))
+    Ok(Some((content, to_autojoin, temp_instruction)))
 }

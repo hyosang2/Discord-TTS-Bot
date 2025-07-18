@@ -6,10 +6,14 @@ A powerful, self-hostable Text-to-Speech Discord bot with support for multiple T
 
 - **🎙️ OpenAI TTS Integration**: 
   - Full support for OpenAI's TTS API with 11 voices (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
-  - **NEW: Multiple OpenAI Models**:
+  - **Multiple OpenAI Models**:
     - `tts-1`: Faster generation, lower quality
     - `tts-1-hd`: High definition audio (default)
     - `gpt-4o-mini-tts`: Experimental GPT-4o mini TTS model
+  - **NEW: Speech Style Instructions**: Control speaking style and tone with natural language instructions
+    - Works with `gpt-4o-mini-tts` model only
+    - Temporary per-message instructions: `\happy Hello world!` or `[speak like a narrator] Once upon a time...`
+    - Persistent user-level instructions via `/set openai_instruction`
 - **🎛️ Voice Customization**: Configurable speaking rates (0.25x-4.0x), voice selection, and per-user settings
 - **💬 Discord Integration**: Seamless voice channel integration with slash commands and prefix commands
 - **🌐 Multi-Server Support**: Works across multiple Discord servers with independent configurations
@@ -307,9 +311,10 @@ Once configured and running:
    ```
    /set voice alloy            # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
    /set openai_model           # Choose OpenAI model (tts-1, tts-1-hd, gpt-4o-mini-tts)
+   /set openai_instruction     # Set persistent speaking style instructions (gpt-4o-mini-tts only)
    /speaking_rate 1.2          # Adjust speed (0.25x to 4.0x)
    /voices                     # List all available voices
-   /settings                   # View current settings including OpenAI model
+   /settings                   # View current settings including OpenAI model and instructions
    ```
 
 3. **Privacy Controls:**
@@ -318,7 +323,7 @@ Once configured and running:
    /opt_out false              # Opt back into TTS processing in this server
    ```
 
-4. **OpenAI Model Selection (NEW):**
+4. **OpenAI Model Selection:**
    ```
    /set openai_model tts-1              # Fast generation, lower quality
    /set openai_model tts-1-hd            # High quality (default)
@@ -326,7 +331,20 @@ Once configured and running:
    /set openai_model                    # Reset to default (tts-1-hd)
    ```
 
-5. **Type in setup channel** - Messages will be read aloud in voice channel
+5. **Speech Style Instructions (NEW):**
+   ```
+   # Persistent instructions (saved to your profile)
+   /set openai_instruction speak like a narrator    # Set speaking style
+   /set openai_instruction                          # Clear instructions
+   
+   # Temporary per-message instructions (only for gpt-4o-mini-tts)
+   \happy Hello everyone!                           # Single word instruction
+   [speak quietly] This is a secret message.       # Multi-word instruction
+   [excited] I just won the lottery!              # Emotional instruction
+   \robotic Beep boop, I am a robot.              # Character instruction
+   ```
+
+6. **Type in setup channel** - Messages will be read aloud in voice channel
 
 ## Privacy & User Controls
 
@@ -414,7 +432,6 @@ cargo clippy
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions
 - [ ] **Admin-level control on certain commands** - Implement role-based command permissions
 - [ ] **Automatic sentiment adjustment** - Adjust TTS tone/speed based on message sentiment
-- [ ] **Instructions** - Add support to pass the prompt for the speaking style of TTS
 
 ### Medium Priority  
 - [ ] **Other TTS services with funny voices** - Re-enable and expand support for:

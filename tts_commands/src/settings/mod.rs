@@ -120,6 +120,16 @@ pub async fn settings(ctx: Context<'_>) -> CommandResult {
         "N/A"
     };
 
+    // Get OpenAI instruction if using OpenAI mode
+    let openai_instruction = if user_mode.unwrap_or(guild_mode) == TTSMode::OpenAI {
+        match user_voice_row.openai_instruction.as_ref() {
+            Some(instruction) => instruction.as_str(),
+            None => "None",
+        }
+    } else {
+        "N/A"
+    };
+
     let (speaking_rate, speaking_rate_kind) = if let Some(mode) = user_mode {
         let user_voice_row = data.user_voice_db.get((author_id.into(), mode)).await?;
         let (default, kind) = match mode.speaking_rate_info() {
@@ -195,6 +205,7 @@ pub async fn settings(ctx: Context<'_>) -> CommandResult {
 {sep3} Voice: `{user_voice}`
 {sep3} Voice Mode: `{voice_mode}`
 {sep3} OpenAI Model: `{openai_model}`
+{sep3} OpenAI Instruction: `{openai_instruction}`
 {sep3} Nickname: `{nickname}`
 {sep3} Speaking Rate: `{speaking_rate}{speaking_rate_kind}`
         "),
@@ -209,7 +220,7 @@ async fn voice_autocomplete<'a>(
     searching: &'a str,
 ) -> serenity::CreateAutocompleteResponse<'a> {
     let data = ctx.data();
-    let Ok((_, mode, _)) = data
+    let Ok((_, mode, _, _)) = data
         .parse_user_or_guild(
             ctx.http(),
             ctx.interaction.user.id,
@@ -364,7 +375,7 @@ where
     (T, TTSMode): database::CacheKeyTrait,
 {
     let data = ctx.data();
-    let (_, mode, _) = data
+    let (_, mode, _, _) = data
         .parse_user_or_guild(ctx.http(), author_id, Some(guild_id))
         .await?;
     Ok(if let Some(voice) = voice {
@@ -961,7 +972,7 @@ pub async fn speaking_rate(
     let data = ctx.data();
     let author = ctx.author();
 
-    let (_, mode, _) = data
+    let (_, mode, _, _) = data
         .parse_user_or_guild(ctx.http(), author.id, ctx.guild_id())
         .await?;
     let Some(speaking_rate_info) = mode.speaking_rate_info() else {
@@ -1109,7 +1120,7 @@ pub async fn openai_model(
     let guild_id = ctx.guild_id().unwrap();
 
     // Get current mode to check if user is using OpenAI
-    let (_, current_mode, _) = data
+    let (_, current_mode, _, _) = data
         .parse_user_or_guild_with_premium(ctx.author().id, Some((guild_id, data.is_premium_simple(ctx.http(), guild_id).await?)))
         .await?;
 
@@ -1146,6 +1157,66 @@ pub async fn openai_model(
         ctx.say(&format!("Set your OpenAI TTS model to: {}", model.as_str())).await?;
     } else {
         ctx.say("Reset your OpenAI TTS model to default (tts-1-hd)").await?;
+    };
+    Ok(())
+}
+
+/// Sets an OpenAI instruction for TTS speech style (only works with gpt-4o-mini-tts model)
+#[poise::command(
+    slash_command,
+    required_permissions = "SEND_MESSAGES",
+    required_bot_permissions = "SEND_MESSAGES",
+    guild_only,
+    // defer_response,
+    category = "Settings"
+)]
+pub async fn openai_instruction(
+    ctx: Context<'_>,
+    #[description = "The instruction for OpenAI TTS speech style (max 500 chars), leave blank to clear"] instruction: Option<String>,
+) -> CommandResult {
+    let data = ctx.data();
+    let guild_id = ctx.guild_id().unwrap();
+
+    // Get current mode to check if user is using OpenAI
+    let (_, current_mode, _, _) = data
+        .parse_user_or_guild_with_premium(ctx.author().id, Some((guild_id, data.is_premium_simple(ctx.http(), guild_id).await?)))
+        .await?;
+
+    if current_mode != TTSMode::OpenAI {
+        ctx.say("You need to set your TTS mode to OpenAI first using `/set mode OpenAI TTS (high quality)` before setting OpenAI instructions.").await?;
+        return Ok(());
+    }
+
+    // Validate instruction length
+    if let Some(ref instruction) = instruction {
+        if instruction.len() > 500 {
+            ctx.say("Instruction is too long! Maximum length is 500 characters.").await?;
+            return Ok(());
+        }
+    }
+
+    // Ensure user exists in userinfo table first
+    data.userinfo_db.create_row(ctx.author().id.into()).await?;
+    
+    // Set the OpenAI instruction in user_voice table
+    let user_voice_key = (ctx.author().id.into(), TTSMode::OpenAI);
+    if instruction.is_some() {
+        // Ensure user has a voice row first
+        data.user_voice_db.create_row(user_voice_key).await?;
+    }
+    
+    // Clone the instruction for the response message
+    let instruction_message = instruction.clone();
+    
+    // Set the instruction in the database
+    data.user_voice_db
+        .set_one(user_voice_key, "openai_instruction", instruction)
+        .await?;
+
+    if let Some(instruction) = instruction_message {
+        ctx.say(&format!("Set your OpenAI TTS instruction to: \"{}\"", instruction)).await?;
+    } else {
+        ctx.say("Cleared your OpenAI TTS instruction").await?;
     };
     Ok(())
 }
@@ -1312,7 +1383,7 @@ pub async fn voices(
 async fn list_polly_voices(ctx: &Context<'_>) -> Result<(String, Vec<String>)> {
     let data = ctx.data();
 
-    let (voice_id, mode, _) = data
+    let (voice_id, mode, _, _) = data
         .parse_user_or_guild(ctx.http(), ctx.author().id, ctx.guild_id())
         .await?;
     let voice = match mode {
@@ -1356,7 +1427,7 @@ async fn list_polly_voices(ctx: &Context<'_>) -> Result<(String, Vec<String>)> {
 async fn list_gcloud_voices(ctx: &Context<'_>) -> Result<(String, Vec<String>)> {
     let data = ctx.data();
 
-    let (lang_variant, mode, _) = data
+    let (lang_variant, mode, _, _) = data
         .parse_user_or_guild(ctx.http(), ctx.author().id, ctx.guild_id())
         .await?;
     let (lang, variant) = match mode {
@@ -1447,6 +1518,7 @@ pub fn commands() -> [Command; 6] {
                 mode(),
                 server_mode(),
                 openai_model(),
+                openai_instruction(),
                 msg_length(),
                 botignore(),
                 translation(),

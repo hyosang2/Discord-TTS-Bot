@@ -72,7 +72,7 @@ console-subscriber = { version = "0.4.1", features = ['parking_lot'] }
 tracing-subscriber = { version = "0.3.19", features = ["parking_lot"] }
 # TODO: Remove `dashmap` once mini_moka releases a breaking version with dashmap 6.
 typesize = { version = "0.1.9", features = ["arrayvec", "dashmap", "details"] }
-async-openai = "0.25"
+async-openai = "0.29"
 
 [workspace.dependencies.sqlx]
 version = "0.8.1"

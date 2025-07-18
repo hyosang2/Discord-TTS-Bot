@@ -97,6 +97,7 @@ pub async fn fetch_openai_audio(
     voice: &str,
     speaking_rate: f32,
     model: crate::structs::OpenAIModel,
+    instruction: Option<&str>,
 ) -> Result<Option<Vec<u8>>> {
     use async_openai::{
         types::{CreateSpeechRequestArgs, SpeechModel, Voice as OpenAIVoice},
@@ -131,12 +132,33 @@ pub async fn fetch_openai_audio(
         crate::structs::OpenAIModel::Gpt4oMiniTts => SpeechModel::Other("gpt-4o-mini-tts".to_string()),
     };
 
-    let request = CreateSpeechRequestArgs::default()
-        .input(content)
-        .voice(openai_voice)
-        .model(speech_model)
-        .speed(speaking_rate)
-        .build()?;
+    // Build the request with or without instructions based on model and availability
+    let request = if matches!(model, crate::structs::OpenAIModel::Gpt4oMiniTts) {
+        if let Some(instruction) = instruction {
+            tracing::info!("Adding OpenAI instruction: {}", instruction);
+            CreateSpeechRequestArgs::default()
+                .input(content)
+                .voice(openai_voice)
+                .model(speech_model)
+                .speed(speaking_rate)
+                .instructions(instruction)
+                .build()?
+        } else {
+            CreateSpeechRequestArgs::default()
+                .input(content)
+                .voice(openai_voice)
+                .model(speech_model)
+                .speed(speaking_rate)
+                .build()?
+        }
+    } else {
+        CreateSpeechRequestArgs::default()
+            .input(content)
+            .voice(openai_voice)
+            .model(speech_model)
+            .speed(speaking_rate)
+            .build()?
+    };
 
     match client.audio().speech(request).await {
         Ok(response) => {
