@@ -221,12 +221,17 @@ async fn voice_autocomplete<'a>(
     };
 
     let openai_voices = [
-        ("alloy".to_string(), "alloy".to_string()),
-        ("echo".to_string(), "echo".to_string()),
-        ("fable".to_string(), "fable".to_string()),
-        ("onyx".to_string(), "onyx".to_string()),
-        ("nova".to_string(), "nova".to_string()),
-        ("shimmer".to_string(), "shimmer".to_string()),
+        ("alloy".to_string(), "Alloy (Neutral, balanced)".to_string()),
+        ("ash".to_string(), "Ash (Expressive, steady)".to_string()),
+        ("ballad".to_string(), "Ballad (Soft, emotional)".to_string()),
+        ("coral".to_string(), "Coral (Warm, friendly)".to_string()),
+        ("echo".to_string(), "Echo (Clear, resonant)".to_string()),
+        ("fable".to_string(), "Fable (Storytelling, engaging)".to_string()),
+        ("nova".to_string(), "Nova (Bright, energetic)".to_string()),
+        ("onyx".to_string(), "Onyx (Deep, authoritative)".to_string()),
+        ("sage".to_string(), "Sage (Calm, thoughtful)".to_string()),
+        ("shimmer".to_string(), "Shimmer (Light, cheerful)".to_string()),
+        ("verse".to_string(), "Verse (Expressive, poetic)".to_string()),
     ];
 
     let voices: &mut dyn Iterator<Item = _> = match mode {
@@ -365,8 +370,9 @@ where
     Ok(if let Some(voice) = voice {
         if check_valid_voice(&data, &voice, mode) {
             general_db.create_row(key).await?;
+            let normalized_voice = voice.to_lowercase();
             voice_db
-                .set_one((key, mode), "voice", voice.as_str())
+                .set_one((key, mode), "voice", normalized_voice.as_str())
                 .await?;
 
             let name = get_voice_name(&data, &voice, mode).unwrap_or(&voice);
@@ -418,7 +424,7 @@ fn check_valid_voice(data: &Data, code: &FixedString<u8>, mode: TTSMode) -> bool
             .split_once(' ')
             .and_then(|(language, variant)| data.gcloud_voices.get(language).map(|l| (l, variant)))
             .is_some_and(|(ls, v)| ls.contains_key(v)),
-        TTSMode::OpenAI => matches!(code.as_str(), "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"),
+        TTSMode::OpenAI => matches!(code.to_lowercase().as_str(), "alloy" | "ash" | "ballad" | "coral" | "echo" | "fable" | "onyx" | "nova" | "sage" | "shimmer" | "verse"),
     }
 }
 
@@ -1268,7 +1274,7 @@ pub async fn voices(
                 let (current_voice, pages) = list_gcloud_voices(&ctx).await?;
                 return run_paginator(current_voice, pages).await;
             }
-            TTSMode::OpenAI => "`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`".to_string(),
+            TTSMode::OpenAI => "`alloy` (Neutral, balanced), `ash` (Expressive, steady), `ballad` (Soft, emotional), `coral` (Warm, friendly), `echo` (Clear, resonant), `fable` (Storytelling, engaging), `nova` (Bright, energetic), `onyx` (Deep, authoritative), `sage` (Calm, thoughtful), `shimmer` (Light, cheerful), `verse` (Expressive, poetic)".to_string(),
         }
     };
 

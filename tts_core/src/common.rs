@@ -104,13 +104,20 @@ pub async fn fetch_openai_audio(
     };
 
     // Parse voice from string to OpenAI Voice enum
+    // Note: New voices (ash, ballad, coral, sage, verse) are mapped to similar existing voices
+    // until the async-openai library supports them
     let openai_voice = match voice {
         "alloy" => OpenAIVoice::Alloy,
+        "ash" => OpenAIVoice::Onyx,      // Expressive, steady -> Deep, authoritative (similar)
+        "ballad" => OpenAIVoice::Fable,   // Soft, emotional -> Storytelling, engaging (similar)
+        "coral" => OpenAIVoice::Nova,     // Warm, friendly -> Bright, energetic (similar)
         "echo" => OpenAIVoice::Echo,
         "fable" => OpenAIVoice::Fable,
-        "onyx" => OpenAIVoice::Onyx,
         "nova" => OpenAIVoice::Nova,
+        "onyx" => OpenAIVoice::Onyx,
+        "sage" => OpenAIVoice::Alloy,     // Calm, thoughtful -> Neutral, balanced (similar)
         "shimmer" => OpenAIVoice::Shimmer,
+        "verse" => OpenAIVoice::Fable,    // Expressive, poetic -> Storytelling, engaging (similar)
         _ => OpenAIVoice::Alloy, // fallback to default
     };
 

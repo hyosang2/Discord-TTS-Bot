@@ -5,7 +5,7 @@ A powerful, self-hostable Text-to-Speech Discord bot with support for multiple T
 ## 🚀 Key Features
 
 - **🎙️ OpenAI TTS Integration**: 
-  - Full support for OpenAI's TTS API with 6 voices (alloy, echo, fable, onyx, nova, shimmer)
+  - Full support for OpenAI's TTS API with 11 voices (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
   - **NEW: Multiple OpenAI Models**:
     - `tts-1`: Faster generation, lower quality
     - `tts-1-hd`: High definition audio (default)
@@ -234,7 +234,7 @@ stats_key = "your_stats_key"
 
 3. **Use OpenAI TTS:**
    ```
-   /set voice alloy          # Choose voice (alloy, echo, fable, onyx, nova, shimmer)
+   /set voice alloy          # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
    /speaking_rate 1.5        # Adjust speed (0.25x to 4.0x)
    /voices                   # List all available voices
    ```
@@ -305,7 +305,7 @@ Once configured and running:
 
 2. **TTS Commands:**
    ```
-   /set voice alloy            # Choose voice (alloy, echo, fable, onyx, nova, shimmer)
+   /set voice alloy            # Choose voice (alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse)
    /set openai_model           # Choose OpenAI model (tts-1, tts-1-hd, gpt-4o-mini-tts)
    /speaking_rate 1.2          # Adjust speed (0.25x to 4.0x)
    /voices                     # List all available voices
@@ -414,6 +414,7 @@ cargo clippy
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions
 - [ ] **Admin-level control on certain commands** - Implement role-based command permissions
 - [ ] **Automatic sentiment adjustment** - Adjust TTS tone/speed based on message sentiment
+- [ ] **Instructions** - Add support to pass the prompt for the speaking style of TTS
 
 ### Medium Priority  
 - [ ] **Other TTS services with funny voices** - Re-enable and expand support for:

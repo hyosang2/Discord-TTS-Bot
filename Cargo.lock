@@ -4221,11 +4221,9 @@ name = "tts_migrations"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "dotenvy",
  "sqlx",
  "toml",
  "tts_core",
- "url",
 ]
 
 [[package]]
