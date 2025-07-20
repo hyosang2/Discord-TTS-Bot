@@ -85,7 +85,7 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "version_check",
- "zerocopy",
+ "zerocopy 0.8.25",
 ]
 
 [[package]]
@@ -2315,7 +2315,7 @@ version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
- "zerocopy",
+ "zerocopy 0.8.25",
 ]
 
 [[package]]
@@ -4130,6 +4130,7 @@ name = "tts_bot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.21.7",
  "console-subscriber",
  "const_format",
  "dashmap 6.1.0",
@@ -4143,6 +4144,7 @@ dependencies = [
  "songbird",
  "symphonia",
  "sysinfo",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -4151,6 +4153,7 @@ dependencies = [
  "tts_events",
  "tts_migrations",
  "tts_tasks",
+ "zerocopy 0.7.35",
 ]
 
 [[package]]
@@ -4184,6 +4187,7 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "async-openai",
+ "base64 0.21.7",
  "bitflags 2.9.1",
  "bool_to_bitflags",
  "chrono",
@@ -4197,6 +4201,7 @@ dependencies = [
  "regex",
  "reqwest",
  "serde",
+ "serde_json",
  "serenity",
  "sha2",
  "songbird",
@@ -4206,6 +4211,7 @@ dependencies = [
  "tokio",
  "tracing",
  "typesize",
+ "whatlang",
 ]
 
 [[package]]
@@ -4641,6 +4647,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "whatlang"
+version = "0.16.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "471d1c1645d361eb782a1650b1786a8fb58dd625e681a04c09f5ff7c8764a7b0"
+dependencies = [
+ "hashbrown 0.14.5",
+ "once_cell",
+]
+
+[[package]]
 name = "whoami"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5000,11 +5016,32 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
+version = "0.7.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
+dependencies = [
+ "byteorder",
+ "zerocopy-derive 0.7.35",
+]
+
+[[package]]
+name = "zerocopy"
 version = "0.8.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1702d9583232ddb9174e01bb7c15a2ab8fb1bc6f227aa1233858c351a3ba0cb"
 dependencies = [
- "zerocopy-derive",
+ "zerocopy-derive 0.8.25",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.7.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]

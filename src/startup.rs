@@ -7,6 +7,7 @@ use poise::serenity_prelude as serenity;
 use tts_core::{
     opt_ext::OptionTryUnwrap as _,
     structs::{GoogleGender, GoogleVoice, PollyVoice, Result, TTSMode, WebhookConfig, WebhookConfigRaw},
+    xtts,
 };
 
 pub async fn get_webhooks(
@@ -181,6 +182,22 @@ pub fn prepare_gcloud_voices(
     }
 
     cleaned_map
+}
+
+pub async fn init_xtts_voice_cache_safe() -> Result<xtts::VoiceCache> {
+    let voice_clips_path = std::path::Path::new("./xtts_voice_clips");
+    match xtts::init_voice_cache(voice_clips_path).await {
+        Ok(cache) => {
+            println!("Initialized XTTS voice cache");
+            Ok(cache)
+        }
+        Err(e) => {
+            eprintln!("Failed to initialize XTTS voice cache: {e}");
+            println!("Using empty XTTS voice cache");
+            // Create empty cache as fallback
+            Ok(std::sync::Arc::new(parking_lot::RwLock::new(std::collections::HashMap::new())))
+        }
+    }
 }
 
 pub async fn send_startup_message(

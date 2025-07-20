@@ -166,7 +166,7 @@ async fn tts_(ctx: Context<'_>, author: &serenity::User, message: &str) -> Comma
             "-{}.{}",
             ctx.id(),
             match mode {
-                TTSMode::gTTS | TTSMode::gCloud | TTSMode::Polly | TTSMode::OpenAI => astr!("mp3"),
+                TTSMode::gTTS | TTSMode::gCloud | TTSMode::Polly | TTSMode::OpenAI | TTSMode::XTTS => astr!("mp3"),
                 TTSMode::eSpeak => astr!("wav"),
             }
         ));

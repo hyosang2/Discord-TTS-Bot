@@ -271,6 +271,15 @@ async fn voice_autocomplete<'a>(
             })
         }),
         TTSMode::OpenAI => &mut openai_voices.iter().cloned(),
+        TTSMode::XTTS => {
+            let xtts_voices: Vec<_> = data
+                .xtts_voice_cache
+                .read()
+                .keys()
+                .map(|voice_name| (voice_name.clone(), voice_name.clone()))
+                .collect();
+            &mut xtts_voices.into_iter()
+        },
     };
 
     let searching_lower = searching.to_lowercase();
@@ -423,7 +432,7 @@ fn get_voice_name<'a>(data: &'a Data, code: &str, mode: TTSMode) -> Option<&'a F
     match mode {
         TTSMode::gTTS => data.gtts_voices.get(code),
         TTSMode::Polly => data.polly_voices.get(code).map(|n| &n.name),
-        TTSMode::eSpeak | TTSMode::gCloud | TTSMode::OpenAI => None,
+        TTSMode::eSpeak | TTSMode::gCloud | TTSMode::OpenAI | TTSMode::XTTS => None,
     }
 }
 
@@ -438,6 +447,11 @@ fn check_valid_voice(data: &Data, code: &FixedString<u8>, mode: TTSMode) -> bool
         TTSMode::OpenAI => {
             let lowercase_code = code.to_lowercase();
             matches!(lowercase_code.as_str(), "alloy" | "ash" | "ballad" | "coral" | "echo" | "fable" | "onyx" | "nova" | "sage" | "shimmer" | "verse")
+        },
+        TTSMode::XTTS => {
+            // Check if the voice exists in the XTTS voice cache
+            let available_voices = tts_core::xtts::get_available_voices(&data.xtts_voice_cache);
+            available_voices.iter().any(|(name, _)| name == code.as_str())
         },
     }
 }
@@ -1349,6 +1363,24 @@ pub async fn voices(
                 return run_paginator(current_voice, pages).await;
             }
             TTSMode::OpenAI => "`alloy` (Neutral, balanced), `ash` (Expressive, steady), `ballad` (Soft, emotional), `coral` (Warm, friendly), `echo` (Clear, resonant), `fable` (Storytelling, engaging), `nova` (Bright, energetic), `onyx` (Deep, authoritative), `sage` (Calm, thoughtful), `shimmer` (Light, cheerful), `verse` (Expressive, poetic)".to_string(),
+            TTSMode::XTTS => {
+                // Get available XTTS voices from the voice cache
+                let available_voices = tts_core::xtts::get_available_voices(&data.xtts_voice_cache);
+                if available_voices.is_empty() {
+                    "No custom voices available. Place voice clips in `xtts_voice_clips/` directory.".to_string()
+                } else {
+                    available_voices.iter()
+                        .map(|(name, languages)| {
+                            if languages.is_empty() {
+                                format!("`{}` (no clips)", name)
+                            } else {
+                                format!("`{}` ({})", name, languages.join(", "))
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            },
         }
     };
 

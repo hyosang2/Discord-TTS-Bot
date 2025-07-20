@@ -17,6 +17,7 @@ fn remember_to_update_analytics_query() {
         TTSMode::eSpeak => (),
         TTSMode::gCloud => (),
         TTSMode::OpenAI => (),
+        TTSMode::XTTS => (),
     }
 }
 

@@ -13,8 +13,13 @@ use tts_tasks::Looper;
 
 #[cfg(unix)]
 fn clear_allocator_cache() {
+    #[cfg(target_os = "linux")]
     unsafe {
         libc::malloc_trim(0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // malloc_trim is not available on macOS/Windows
     }
 }
 

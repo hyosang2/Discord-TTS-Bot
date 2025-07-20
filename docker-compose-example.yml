@@ -9,6 +9,8 @@ services:
         depends_on:
             database:
                 condition: service_healthy
+            xtts-service:
+                condition: service_started
             # Note: tts-service is optional - OpenAI TTS is now default
             # tts-service:
             #     condition: service_started
@@ -26,6 +28,18 @@ services:
             interval: 5s
             timeout: 5s
             retries: 5
+    # XTTS Service (Local voice cloning TTS)
+    xtts-service:
+        image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu
+        ports: [8000:80]
+        environment:
+            - COQUI_TOS_AGREED=1
+        volumes:
+            - ./xtts_voice_clips:/app/tts_models/voices
+            - ./xtts_models:/app/tts_models
+        platform: linux/amd64  # XTTS only supports amd64, runs with emulation on Apple Silicon
+        restart: unless-stopped
+
     # TTS Service (Optional - OpenAI TTS is now the default)
     # Uncomment if you want to use gTTS, eSpeak, Polly, or gCloud TTS services
     # tts-service:

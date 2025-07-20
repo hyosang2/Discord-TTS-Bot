@@ -235,3 +235,145 @@ Instruction selection follows priority order in `tts_events/src/message/tts.rs:1
 - [ ] Improve error messages for users
 - [ ] Add metrics/monitoring dashboard
 - [ ] Optimize database queries
+
+## Deployment Approaches
+
+This bot supports two deployment strategies optimized for different use cases:
+
+### Option 5: Hybrid Development Setup (Recommended for Development)
+
+**Best for**: Fast iteration during development on Apple Silicon or Linux x86_64
+
+```bash
+# 1. Start only database and XTTS services in Docker
+docker compose -f docker-compose-example.yml up database xtts-service -d
+
+# 2. Run bot locally with native performance
+cargo run
+
+# Benefits:
+# - Instant recompilation and testing
+# - Native debugger support
+# - No Docker rebuild delays
+# - Services remain containerized for consistency
+```
+
+**docker-compose.dev.yml** (create this file):
+```yaml
+services:
+  database:
+    image: postgres:13
+    ports: [5433:5432]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: tts
+      POSTGRES_USER: tts
+      POSTGRES_PASSWORD: tts_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tts -d tts"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  xtts-service:
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu
+    platform: linux/amd64  # XTTS only supports x86_64
+    ports: [8000:80]
+    environment:
+      - COQUI_TOS_AGREED=1
+    volumes:
+      - ./xtts_voice_clips:/app/tts_models/voices
+      - ./xtts_models:/app/tts_models
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+```
+
+### Option 3: Multi-Architecture Production Build (Recommended for Distribution)
+
+**Best for**: Deploying to both x86_64 and ARM64 (Apple Silicon, Raspberry Pi)
+
+```dockerfile
+# Dockerfile.multiarch
+FROM rust:1.88 AS builder
+
+# Install dependencies for both architectures
+RUN apt-get update && apt-get install -y \
+    gcc-aarch64-linux-gnu \
+    gcc-x86-64-linux-gnu \
+    cmake libopus-dev
+
+# Add Rust targets
+RUN rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+
+# Copy source
+WORKDIR /bot
+COPY . .
+
+# Build for target architecture
+ARG TARGETARCH
+RUN case ${TARGETARCH} in \
+    amd64) export RUST_TARGET=x86_64-unknown-linux-gnu ;; \
+    arm64) export RUST_TARGET=aarch64-unknown-linux-gnu ;; \
+    esac && \
+    cargo build --release --target $RUST_TARGET && \
+    mv target/$RUST_TARGET/release/tts_bot /bot/tts_bot
+
+# Runtime stage
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /bot/tts_bot /usr/local/bin/discord_tts_bot
+CMD ["/usr/local/bin/discord_tts_bot"]
+```
+
+**GitHub Actions** for automated multi-arch builds:
+```yaml
+# .github/workflows/docker-multiarch.yml
+name: Build Multi-Architecture Images
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.multiarch
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+```
+
+### Platform Compatibility
+
+| Component | x86_64 | ARM64 (M1/M2) | Notes |
+|-----------|--------|---------------|--------|
+| Bot | ✅ Native | ✅ Native | Multi-arch build |
+| PostgreSQL | ✅ Native | ✅ Native | Official images |
+| XTTS | ✅ Native | ⚠️ Emulated | x86_64 only, runs via Rosetta |
+
+### When to Use Each Approach
+
+- **Development**: Use Option 5 (Hybrid) for fastest iteration
+- **Testing**: Use Option 5 locally or full Docker Compose
+- **CI/CD**: Use Option 3 with GitHub Actions
+- **Production**: Use Option 3 for universal compatibility
+- **Distribution**: Publish multi-arch images to Docker Hub/GHCR

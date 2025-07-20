@@ -72,6 +72,7 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         espeak_voices,
         gcloud_voices,
         polly_voices,
+        xtts_voice_cache,
         translation_languages,
         shard_count,
     ) = tokio::try_join!(
@@ -86,6 +87,7 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
         fetch_voices_safe_espeak(&reqwest, tts_service(), auth_key),
         fetch_voices_safe_gcloud(&reqwest, tts_service(), auth_key),
         fetch_voices_safe_polly(&reqwest, tts_service(), auth_key),
+        init_xtts_voice_cache_safe(),
         fetch_translation_languages(&reqwest, tts_service(), auth_key),
         async { Ok(http.get_bot_gateway().await?.shards) },
     )?;
@@ -137,6 +139,7 @@ async fn main_(console_layer: impl Layer, start_time: std::time::SystemTime) -> 
             .into_iter()
             .map(|v| (v.id.clone(), v))
             .collect::<BTreeMap<_, _>>(),
+        xtts_voice_cache,
 
         config: config.main,
         premium_config: config.premium,

@@ -1,0 +1,29 @@
+services:
+  database:
+    image: postgres:13
+    ports: [5433:5432]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: tts
+      POSTGRES_USER: tts
+      POSTGRES_PASSWORD: tts_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tts -d tts"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  xtts-service:
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu
+    platform: linux/amd64  # XTTS only supports x86_64
+    ports: [8000:80]
+    environment:
+      - COQUI_TOS_AGREED=1
+    volumes:
+      - ./xtts_voice_clips:/app/tts_models/voices
+      - ./xtts_models:/app/tts_models
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

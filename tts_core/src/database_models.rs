@@ -161,6 +161,7 @@ pub struct GuildVoiceRowRaw {
     pub voice: String,
     pub openai_model: Option<OpenAIModel>,
     pub openai_instruction: Option<String>,
+    pub xtts_voice: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, TypeSize)]
@@ -170,6 +171,7 @@ pub struct GuildVoiceRow {
     pub voice: ArrayString<MAX_VOICE_LENGTH>,
     pub openai_model: Option<OpenAIModel>,
     pub openai_instruction: Option<ArrayString<500>>,
+    pub xtts_voice: Option<ArrayString<100>>,
 }
 
 impl Compact for GuildVoiceRowRaw {
@@ -183,6 +185,9 @@ impl Compact for GuildVoiceRowRaw {
             openai_instruction: self
                 .openai_instruction
                 .map(|i| truncate_convert(i, "guildvoicerow.openai_instruction")),
+            xtts_voice: self
+                .xtts_voice
+                .map(|v| truncate_convert(v, "guildvoicerow.xtts_voice")),
         }
     }
 }
@@ -195,6 +200,7 @@ pub struct UserVoiceRowRaw {
     pub speaking_rate: Option<f32>,
     pub openai_model: Option<OpenAIModel>,
     pub openai_instruction: Option<String>,
+    pub xtts_voice: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, TypeSize)]
@@ -205,6 +211,7 @@ pub struct UserVoiceRow {
     pub speaking_rate: Option<f32>,
     pub openai_model: Option<OpenAIModel>,
     pub openai_instruction: Option<ArrayString<500>>,
+    pub xtts_voice: Option<ArrayString<100>>,
 }
 
 impl Compact for UserVoiceRowRaw {
@@ -221,6 +228,9 @@ impl Compact for UserVoiceRowRaw {
             openai_instruction: self
                 .openai_instruction
                 .map(|i| truncate_convert(i, "uservoicerow.openai_instruction")),
+            xtts_voice: self
+                .xtts_voice
+                .map(|v| truncate_convert(v, "uservoicerow.xtts_voice")),
         }
     }
 }

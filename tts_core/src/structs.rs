@@ -23,7 +23,7 @@ use poise::serenity_prelude::{
     ChannelId, GuildId, RoleId, SkuId, UserId,
 };
 
-use crate::{analytics, bool_enum, common::timestamp_in_future, database};
+use crate::{analytics, bool_enum, common::timestamp_in_future, database, xtts};
 
 macro_rules! into_static_display {
     ($struct:ident, max_length($len:literal)) => {
@@ -71,6 +71,7 @@ pub struct MainConfig {
     pub main_server: GuildId,
     pub ofs_role: RoleId,
     pub openai_api_key: Option<FixedString>,
+    pub xtts_service: Option<reqwest::Url>,
 
     // Only for situations where gTTS has broken
     #[serde(default)]
@@ -83,6 +84,7 @@ pub struct PostgresConfig {
     pub user: String,
     pub database: String,
     pub password: String,
+    pub port: Option<u16>,
     pub max_connections: Option<u32>,
 }
 
@@ -278,6 +280,7 @@ pub struct Data {
     pub polly_voices: BTreeMap<FixedString<u8>, PollyVoice>,
     pub gcloud_voices: BTreeMap<FixedString<u8>, BTreeMap<FixedString<u8>, GoogleGender>>,
 
+    pub xtts_voice_cache: xtts::VoiceCache,
     pub translation_languages: BTreeMap<FixedString<u8>, FixedString<u8>>,
 }
 
@@ -551,13 +554,14 @@ pub enum TTSMode {
     gCloud,
     #[default]
     OpenAI,
+    XTTS,
 }
 
 impl TTSMode {
     #[must_use]
     pub const fn is_premium(self) -> bool {
         match self {
-            Self::gTTS | Self::eSpeak | Self::OpenAI => false,
+            Self::gTTS | Self::eSpeak | Self::OpenAI | Self::XTTS => false,
             Self::Polly | Self::gCloud => true,
         }
     }
@@ -570,6 +574,7 @@ impl TTSMode {
             Self::Polly => "Brian",
             Self::gCloud => "en-US A",
             Self::OpenAI => "alloy",
+            Self::XTTS => "default",
         }
     }
 
@@ -581,6 +586,7 @@ impl TTSMode {
             Self::Polly => SpeakingRateInfo::new(10.0, "100.0", 500.0, "%"),
             Self::eSpeak => SpeakingRateInfo::new(100.0, "175.0", 400.0, " words per minute"),
             Self::OpenAI => SpeakingRateInfo::new(0.25, "1.0", 4.0, "x"),
+            Self::XTTS => SpeakingRateInfo::new(0.5, "1.0", 2.0, "x"),
         }
     }
 }
@@ -643,6 +649,9 @@ pub enum TTSModeChoice {
     #[name = "OpenAI TTS (high quality)"]
     #[name = "openai"]
     OpenAI,
+    #[name = "XTTS (local voice cloning)"]
+    #[name = "xtts"]
+    XTTS,
     // Temporarily disabled due to missing TTS service
     // #[name = "Google Translate TTS (female) (default)"]
     // #[name = "gtts"]
@@ -662,6 +671,7 @@ impl From<TTSModeChoice> for TTSMode {
     fn from(mode: TTSModeChoice) -> Self {
         match mode {
             TTSModeChoice::OpenAI => Self::OpenAI,
+            TTSModeChoice::XTTS => Self::XTTS,
             // TTSModeChoice::gTTS => Self::gTTS,
             // TTSModeChoice::Polly => Self::Polly,
             // TTSModeChoice::eSpeak => Self::eSpeak,

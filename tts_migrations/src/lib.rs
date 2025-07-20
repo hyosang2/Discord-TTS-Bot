@@ -184,6 +184,7 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
             ALTER TYPE TTSMode RENAME VALUE 'premium' TO 'gcloud';
             ALTER TYPE TTSMode ADD VALUE 'polly';
             ALTER TYPE TTSMode ADD VALUE 'openai';
+            ALTER TYPE TTSMode ADD VALUE 'xtts';
         EXCEPTION
             WHEN OTHERS THEN null;
         END $$;
@@ -241,10 +242,12 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
         ALTER TABLE user_voice
             ADD COLUMN IF NOT EXISTS speaking_rate real,
             ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd',
-            ADD COLUMN IF NOT EXISTS openai_instruction varchar(500);
+            ADD COLUMN IF NOT EXISTS openai_instruction varchar(500),
+            ADD COLUMN IF NOT EXISTS xtts_voice varchar(100) DEFAULT 'default';
         ALTER TABLE guild_voice
             ADD COLUMN IF NOT EXISTS openai_model OpenAIModel DEFAULT 'tts-1-hd',
-            ADD COLUMN IF NOT EXISTS openai_instruction varchar(500);
+            ADD COLUMN IF NOT EXISTS openai_instruction varchar(500),
+            ADD COLUMN IF NOT EXISTS xtts_voice varchar(100) DEFAULT 'default';
 
         CREATE TABLE IF NOT EXISTS user_opt_out (
             user_id   bigint,
@@ -271,12 +274,19 @@ async fn run_(config: &mut toml::Table, transaction: &mut Transaction<'_>) -> Re
             DROP CONSTRAINT IF EXISTS traceback_hash_pkey,
             ADD CONSTRAINT traceback_hash_pkey PRIMARY KEY (traceback_hash);
 
+    ").await?;
+
+    // Insert default records in a separate transaction to ensure enum types are committed
+    transaction.execute("
         INSERT INTO user_voice  (user_id, mode)         VALUES(0, 'gtts')       ON CONFLICT (user_id, mode)  DO NOTHING;
         INSERT INTO guild_voice (guild_id, mode, voice) VALUES(0, 'gtts', 'en') ON CONFLICT (guild_id, mode) DO NOTHING;
         INSERT INTO user_voice  (user_id, mode)         VALUES(0, 'openai')     ON CONFLICT (user_id, mode)  DO NOTHING;
         INSERT INTO guild_voice (guild_id, mode, voice) VALUES(0, 'openai', 'alloy') ON CONFLICT (guild_id, mode) DO NOTHING;
         INSERT INTO user_opt_out (user_id, guild_id, opted_out) VALUES(0, 0, false) ON CONFLICT (user_id, guild_id) DO NOTHING;
     ").await?;
+
+    // XTTS default records will be added on first use rather than during migration
+    // to avoid enum transaction issues
 
     migrate_single_to_modes(transaction, "userinfo", "user_voice", "voice", "user_id").await?;
     migrate_single_to_modes(
@@ -304,6 +314,7 @@ pub async fn load_db_and_conf() -> Result<(sqlx::PgPool, Config)> {
 
     let pool_options = sqlx::postgres::PgConnectOptions::new()
         .host(&postgres.host)
+        .port(postgres.port.unwrap_or(5432))
         .username(&postgres.user)
         .database(&postgres.database)
         .password(&postgres.password);

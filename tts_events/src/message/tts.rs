@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use aformat::ToArrayString as _;
 use poise::serenity_prelude as serenity;
+use tracing::info;
 
 use tts_core::{
     common::{clean_msg, fetch_audio, fetch_openai_audio, prepare_url},
@@ -10,6 +11,7 @@ use tts_core::{
     opt_ext::OptionTryUnwrap as _,
     structs::{Data, IsPremium, JoinVCToken, Result, TTSMode},
     traits::SongbirdManagerExt as _,
+    xtts,
 };
 
 /// Parses temporary instructions from message content.
@@ -167,6 +169,22 @@ pub(crate) async fn process_tts_msg(
                 None => return Ok(()),
             }
         }
+        TTSMode::XTTS => {
+            // Use XTTS local TTS API
+            let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
+            match xtts::fetch_xtts_audio(data, &content, &voice, speaking_rate_f32).await? {
+                Some(bytes) => {
+                    // Log details about the audio for debugging
+                    info!("XTTS audio: {} bytes, first 16 bytes: {:?}", 
+                          bytes.len(), 
+                          &bytes[..std::cmp::min(16, bytes.len())]);
+                    
+                    // Try direct bytes input like OpenAI
+                    Some(songbird::input::Input::from(bytes))
+                }
+                None => return Ok(()),
+            }
+        }
         _ => {
             // Use traditional TTS service for other modes
             let url = prepare_url(
@@ -217,6 +235,7 @@ pub(crate) async fn process_tts_msg(
             TTSMode::gCloud => "gCloud_tts",
             TTSMode::Polly => "Polly_tts",
             TTSMode::OpenAI => "OpenAI_tts",
+            TTSMode::XTTS => "XTTS_tts",
         }),
         false,
     );
