@@ -4,3 +4,24 @@ docker-compose.yml
 /config.toml
 /target
 /xtts_voice_clips
+
+# Native XTTS related files and directories
+/tests/
+/output/
+/xtts_models/
+/xtts.log
+/start-xtts.sh.log
+
+# Temporary and test files
+*.tmp
+*.temp
+*.test
+/temp/
+/tmp/
+.DS_Store
+
+# Conda environment and Python files
+.conda/
+*.pyc
+__pycache__/
+*.egg-info/

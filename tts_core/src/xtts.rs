@@ -3,9 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
-use base64;
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::{error, info, warn};
 use whatlang::{detect, Lang};
 
@@ -29,26 +28,12 @@ pub struct Voice {
 /// XTTS character limit (conservative estimate based on timeouts observed)
 const XTTS_CHAR_LIMIT: usize = 250;
 
-/// XTTS API request structure for /tts endpoint
+/// Native XTTS API request structure for /tts_to_audio/ endpoint
 #[derive(Debug, Serialize)]
-struct XTTSRequest {
+struct NativeXTTSRequest {
     text: String,
-    speaker_embedding: Vec<f32>,
-    gpt_cond_latent: Vec<Vec<f32>>,
+    speaker_wav: String,
     language: String,
-}
-
-/// XTTS API response structure for /clone_speaker endpoint
-#[derive(Debug, Deserialize)]
-struct CloneSpeakerResponse {
-    speaker_embedding: Vec<f32>,
-    gpt_cond_latent: Vec<Vec<f32>>,
-}
-
-/// XTTS API response structure
-#[derive(Debug, Deserialize)]
-struct XTTSResponse {
-    audio: Vec<u8>,
 }
 
 /// Cache for voice clips
@@ -266,29 +251,25 @@ pub fn get_voice_clip_path(
     voice.clips.values().next().cloned()
 }
 
-/// Fetch audio from a single text chunk
+/// Fetch audio from a single text chunk using native XTTS API
 async fn fetch_xtts_chunk(
     data: &Data,
     text: &str,
     speaker_wav: &str,
     language: &str,
-    speaking_rate: f32,
+    _speaking_rate: f32,
     xtts_service_url: &reqwest::Url,
 ) -> Result<Vec<u8>> {
-    // Step 1: Clone speaker to get embeddings
-    let clone_embeddings = clone_speaker(data, speaker_wav, xtts_service_url).await?;
-    
-    // Step 2: Generate TTS using embeddings
-    let request = XTTSRequest {
+    // Create request for native XTTS API
+    let request = NativeXTTSRequest {
         text: text.to_string(),
-        speaker_embedding: clone_embeddings.speaker_embedding,
-        gpt_cond_latent: clone_embeddings.gpt_cond_latent,
+        speaker_wav: speaker_wav.to_string(),
         language: language.to_string(),
     };
     
-    // Make TTS API request
+    // Make TTS API request to native /tts_to_audio/ endpoint
     let mut url = xtts_service_url.clone();
-    url.set_path("/tts");
+    url.set_path("/tts_to_audio/");
     
     let response = data.reqwest
         .post(url)
@@ -299,20 +280,12 @@ async fn fetch_xtts_chunk(
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-        error!("XTTS API error {}: {}", status, error_text);
-        return Err(anyhow::anyhow!("XTTS API error: {}", status));
+        error!("Native XTTS API error {}: {}", status, error_text);
+        return Err(anyhow::anyhow!("Native XTTS API error: {}", status));
     }
     
-    let response_text = response.text().await?;
-    
-    // XTTS returns a JSON string containing base64-encoded WAV data
-    // Parse the JSON to extract the base64 string
-    let base64_audio: String = serde_json::from_str(&response_text)
-        .map_err(|e| anyhow::anyhow!("Failed to parse XTTS JSON response: {}", e))?;
-    
-    // Decode the base64 data to get raw WAV bytes
-    let audio_bytes = base64::decode(&base64_audio)
-        .map_err(|e| anyhow::anyhow!("Failed to decode base64 audio data: {}", e))?;
+    // Native XTTS returns raw audio bytes directly
+    let audio_bytes = response.bytes().await?.to_vec();
     
     Ok(audio_bytes)
 }
@@ -345,8 +318,11 @@ pub async fn fetch_xtts_audio(
         }
     };
     
-    // Convert path to string for API
-    let speaker_wav = voice_clip_path.to_string_lossy().to_string();
+    // Convert path to relative format for native API (voice_name/language.wav)
+    let speaker_wav = format!("{}/{}", voice_name, 
+        voice_clip_path.file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("en.wav"));
     
     // Use detected language or default to English
     let language = detected_language.unwrap_or_else(|| "en".to_string());
@@ -399,45 +375,6 @@ pub async fn fetch_xtts_audio(
     Ok(Some(all_audio_data))
 }
 
-/// Clone speaker to get embeddings for TTS
-async fn clone_speaker(
-    data: &Data,
-    speaker_wav_path: &str,
-    xtts_service_url: &reqwest::Url,
-) -> Result<CloneSpeakerResponse> {
-    // Read the WAV file
-    let wav_data = std::fs::read(speaker_wav_path)
-        .map_err(|e| anyhow::anyhow!("Failed to read speaker WAV file '{}': {}", speaker_wav_path, e))?;
-    
-    // Create multipart form with the WAV file
-    let part = reqwest::multipart::Part::bytes(wav_data)
-        .file_name("speaker.wav")
-        .mime_str("audio/wav")?;
-    
-    let form = reqwest::multipart::Form::new()
-        .part("wav_file", part);
-    
-    // Make clone_speaker API request
-    let mut url = xtts_service_url.clone();
-    url.set_path("/clone_speaker");
-    
-    let response = data.reqwest
-        .post(url)
-        .multipart(form)
-        .send()
-        .await?;
-    
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-        error!("XTTS clone_speaker API error {}: {}", status, error_text);
-        return Err(anyhow::anyhow!("XTTS clone_speaker API error: {}", status));
-    }
-    
-    let clone_response: CloneSpeakerResponse = response.json().await?;
-    info!("Successfully cloned speaker with {} embedding dimensions", clone_response.speaker_embedding.len());
-    Ok(clone_response)
-}
 
 /// Get list of available voices
 pub fn get_available_voices(voice_cache: &VoiceCache) -> Vec<(String, Vec<String>)> {

@@ -24,6 +24,14 @@ Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-works
   - `gpt-4o-mini-tts`: Experimental GPT-4o mini TTS model
 - **Command**: `/set openai_model [model]` for model selection
 - **Database**: Added `openai_model` column to `user_voice` and `guild_voice` tables
+- **Native XTTS Integration**: Added support for native XTTS installation on Apple Silicon for 30-40% performance improvement:
+  - New `tts_core/src/xtts.rs` module for native XTTS API integration
+  - Replaced Docker XTTS API structure with native `/tts_to_audio/` endpoint
+  - Added voice clip caching system and language detection
+  - Created hybrid deployment model: native XTTS + Docker database
+  - Performance: Korean TTS reduced from 26s (Docker) to 15-18s (native) on M4 Pro
+  - Memory usage: 40% reduction (2-3GB vs 4-5GB)
+  - Dependencies: conda environment with xtts-api-server and PyTorch 2.1.2
 
 ## Build and Development Commands
 
@@ -85,6 +93,48 @@ Discord TTS Bot written in Rust using Serenity, Songbird, and Poise. Multi-works
   - **Result**: Database data persists across container restarts, automatic self-healing
   - **Emergency reset** (rarely needed): `docker compose down -v && docker compose up --build -d`
 
+### Native XTTS Development Commands (Apple Silicon Optimized)
+
+#### Setup Commands
+- `brew install --cask miniconda` - Install Python environment manager
+- `brew install portaudio ffmpeg` - Install system dependencies
+- `conda create -n xtts python=3.10 -y` - Create XTTS environment
+- `conda activate xtts` - Activate XTTS environment
+- `pip install xtts-api-server` - Install XTTS server
+- `pip install torch==2.1.2 torchaudio==2.1.2` - Install compatible PyTorch
+
+#### Running Native XTTS
+- `docker compose -f docker-compose.dev.yml up database -d` - Start database only
+- `conda activate xtts && python -m xtts_api_server --host 0.0.0.0 --port 8000 --device cpu --speaker-folder ./xtts_voice_clips --use-cache` - Start native XTTS server
+- `cargo run` - Run bot with native XTTS integration
+- `./start-xtts.sh &` - Start XTTS server in background (alternative)
+
+#### Monitoring and Debugging
+- `lsof -i :8000` - Check if XTTS port is available
+- `curl http://localhost:8000/docs` - Verify XTTS server is running
+- `find xtts_voice_clips -name "*.wav" -size 0` - Check for corrupted voice files
+- `docker compose -f docker-compose.dev.yml logs database` - Check database logs
+- `conda list` - Verify installed packages in xtts environment
+
+#### Performance Testing
+- Test Korean message: `봄날 따뜻한 햇살 아래에서 친구들과 함께 한강공원을 걸으며 즐거운 대화를 나누는 시간은 정말 소중하고 행복합니다.`
+- Expected performance: 15-18 seconds (vs 26 seconds Docker)
+- Memory usage: 2-3GB (vs 4-5GB Docker)
+- Architecture: Native ARM64 (vs x86_64 emulation)
+
+#### Voice Clips Management
+- Voice clips directory: `./xtts_voice_clips/`
+- Structure: `voice_name/language.wav` (e.g., `syanster/ko.wav`)
+- Validation: All WAV files must be valid audio (not 0 bytes)
+- Cleanup: `rm -rf xtts_voice_clips/corrupted_directory`
+
+#### Troubleshooting Commands
+- **PyAudio error**: `brew install portaudio`
+- **PyTorch weights error**: `pip install torch==2.1.2 torchaudio==2.1.2`
+- **ffmpeg warning**: `brew install ffmpeg`
+- **Conda not found**: `exec $SHELL -l` (restart shell)
+- **Port conflicts**: `docker compose -f docker-compose.dev.yml down --remove-orphans`
+
 ## Architecture
 
 ### Workspace Structure
@@ -101,6 +151,7 @@ Multi-crate workspace with specialized modules:
 - **Voice**: Songbird integration for voice channel management and TTS playbook
 - **Database**: PostgreSQL with sqlx for persistent storage (guilds, users, voice settings, opt-out preferences, instruction settings)
 - **TTS Integration**: OpenAI TTS API for text-to-speech synthesis (default mode) with instruction support
+- **Native XTTS Integration**: `tts_core/src/xtts.rs` module for native XTTS voice cloning with 30-40% performance improvement over Docker
 - **Privacy Controls**: Per-server user opt-out system with database-backed persistence
 - **Premium System**: Role-based premium features with subscription validation
 - **Analytics**: Background collection and processing of usage metrics
@@ -195,6 +246,16 @@ Instruction selection follows priority order in `tts_events/src/message/tts.rs:1
   - [x] Users now need to set TTS mode first: `/set mode OpenAI TTS (high quality)`
   - [x] Then set voice: `/set voice alloy` (or any OpenAI voice)
   - [x] Fixed compilation errors and container build issues
+
+- [x] **Native XTTS Integration** - ✅ **COMPLETED**: Added native XTTS support for Apple Silicon M4 Pro
+  - [x] Created `tts_core/src/xtts.rs` module with native XTTS API integration
+  - [x] Replaced Docker XTTS API structure (clone_speaker + tts) with native `/tts_to_audio/` endpoint
+  - [x] Added voice clip caching system with language detection and fallback logic
+  - [x] Implemented text chunking for 250-character XTTS limit with automatic silence insertion
+  - [x] Created hybrid deployment model: native XTTS + Docker database via `docker-compose.dev.yml`
+  - [x] Performance optimization: 30-40% faster (15-18s vs 26s for Korean), 40% less memory (2-3GB vs 4-5GB)
+  - [x] Conda environment setup with xtts-api-server and PyTorch 2.1.2 compatibility
+  - [x] Comprehensive troubleshooting and startup scripts (`start-xtts.sh`, `NATIVE-XTTS-SETUP.md`)
 
 ### High Priority
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions

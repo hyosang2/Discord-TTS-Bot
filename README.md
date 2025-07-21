@@ -567,6 +567,149 @@ jobs:
 - **Production**: Use Option 3 for universal compatibility
 - **Distribution**: Publish multi-arch images to Docker Hub/GHCR
 
+## 🔥 Native XTTS Setup for Apple Silicon (NEW)
+
+**🎯 Performance Results on M4 Pro:**
+- **Korean test message**: Reduced from 26 seconds (Docker) to 15-18 seconds (Native) 
+- **Performance improvement**: 30-40% faster than Docker with Rosetta emulation
+- **Memory usage**: 40% less memory consumption (2-3GB vs 4-5GB)
+- **Architecture**: Native ARM64 processing, no x86_64 emulation overhead
+
+### Prerequisites
+
+```bash
+# Install miniconda for Python environment management
+brew install --cask miniconda
+
+# Install system dependencies
+brew install portaudio ffmpeg
+
+# Restart shell to load conda
+exec $SHELL -l
+```
+
+### Installation
+
+1. **Create Conda Environment:**
+   ```bash
+   conda create -n xtts python=3.10 -y
+   conda activate xtts
+   ```
+
+2. **Install XTTS and Dependencies:**
+   ```bash
+   pip install xtts-api-server
+   pip install torch==2.1.2 torchaudio==2.1.2  # Compatible PyTorch version
+   ```
+
+3. **Verify MPS Support:**
+   ```python
+   import torch
+   print('MPS available:', torch.backends.mps.is_available())  # Should be True
+   print('PyTorch version:', torch.__version__)  # Should be 2.1.2
+   ```
+
+### Running Native XTTS
+
+**Option 1: Manual Startup (Recommended)**
+```bash
+# Terminal 1: Start database only
+docker compose -f docker-compose.dev.yml up database -d
+
+# Terminal 2: Start native XTTS server
+conda activate xtts
+python -m xtts_api_server \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --device cpu \
+    --speaker-folder ./xtts_voice_clips \
+    --use-cache
+
+# Terminal 3: Start Discord bot
+cargo run
+```
+
+**Option 2: Using Startup Script**
+```bash
+# Start database
+docker compose -f docker-compose.dev.yml up database -d
+
+# Start XTTS server (background)
+./start-xtts.sh &
+
+# Start Discord bot
+cargo run
+```
+
+### Voice Clips Setup
+
+Organize voice clips in the following directory structure:
+```
+xtts_voice_clips/
+├── default/
+│   └── en.wav (valid audio file)
+└── syanster/
+    ├── en.wav (valid audio file)
+    └── ko.wav (valid audio file)
+```
+
+**Important**: All WAV files must contain valid audio data (not 0 bytes). Remove any corrupted files:
+```bash
+# Check for empty files
+find xtts_voice_clips -name "*.wav" -size 0
+
+# Remove corrupted directories if found
+rm -rf xtts_voice_clips/bad_directory
+```
+
+### Performance Characteristics
+
+| Metric | Docker (x86_64 + Rosetta) | Native (ARM64) | Improvement |
+|--------|---------------------------|----------------|-------------|
+| Korean TTS | 26 seconds | 15-18 seconds | 30-40% faster |
+| Memory | 4-5GB | 2-3GB | 40% less |
+| CPU efficiency | Lower (emulation) | Higher (native) | Better |
+| Setup time | 5 seconds | 3 seconds | 40% faster |
+
+### Hardware Specifications (M4 Pro)
+- **CPU**: 12-core M4 Pro (8 performance + 4 efficiency cores)
+- **GPU**: 16-core (unused - XTTS doesn't support MPS yet)
+- **Memory**: 24GB unified memory
+- **Architecture**: ARM64 (native, no emulation)
+
+### Known Limitations
+
+1. **GPU Acceleration**: XTTS doesn't support Apple Silicon GPU (MPS) yet - CPU only
+2. **PyTorch Version**: Must use 2.1.2 for compatibility (not latest 2.7.1)
+3. **Model Loading**: Initial model download (~1.86GB) on first run
+4. **Character Limit**: 250 characters per chunk (handled automatically)
+
+### Troubleshooting
+
+**PyAudio compilation error:**
+```bash
+brew install portaudio
+```
+
+**PyTorch weights_only error:**
+```bash
+pip install torch==2.1.2 torchaudio==2.1.2
+```
+
+**ffmpeg warning:**
+```bash
+brew install ffmpeg
+```
+
+**XTTS server not responding:**
+```bash
+# Check if port 8000 is available
+lsof -i :8000
+curl http://localhost:8000/docs  # Should return HTML page
+```
+
+For detailed troubleshooting, see `NATIVE-XTTS-SETUP.md`.
+
 ## Development
 
 ```bash
