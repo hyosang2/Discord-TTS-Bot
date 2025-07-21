@@ -97,6 +97,12 @@ pub(crate) async fn process_tts_msg(
             .get([guild_id.into(), message.author.id.into()])
             .await?;
 
+        // For XTTS mode with xsaid, we don't want the name in the content
+        let should_include_name_in_content = mode != TTSMode::XTTS && guild_row.xsaid();
+        
+        info!("Before clean_msg - content: '{}', mode: {:?}, xsaid: {}, should_include_name: {}", 
+              content, mode, guild_row.xsaid(), should_include_name_in_content);
+        
         content = clean_msg(
             &content,
             &message.author,
@@ -105,7 +111,7 @@ pub(crate) async fn process_tts_msg(
             member_nick,
             &message.attachments,
             &voice,
-            guild_row.xsaid(),
+            should_include_name_in_content,
             guild_row.skip_emoji(),
             guild_row.repeated_chars,
             nickname_row.name.as_deref(),
@@ -113,6 +119,8 @@ pub(crate) async fn process_tts_msg(
             &data.regex_cache,
             &data.last_to_xsaid_tracker,
         );
+        
+        info!("After clean_msg - content: '{}'", content);
 
         (voice, mode, openai_model, persistent_instruction)
     };
@@ -149,7 +157,7 @@ pub(crate) async fn process_tts_msg(
     };
 
     // Handle different TTS modes
-    let audio_result = match mode {
+    let track_handle = match mode {
         TTSMode::OpenAI => {
             // Use OpenAI TTS API
             let Some(openai_api_key) = &data.config.openai_api_key else {
@@ -161,28 +169,101 @@ pub(crate) async fn process_tts_msg(
             let instruction = temp_instruction.as_deref().or(persistent_instruction.as_deref());
 
             let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
-            match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32, openai_model, instruction).await? {
-                Some(bytes) => {
-                    // Create input from bytes directly
-                    Some(songbird::input::Input::from(bytes))
-                }
+            let audio_reader = match fetch_openai_audio(openai_api_key, &content, &voice, speaking_rate_f32, openai_model, instruction).await? {
+                Some(bytes) => songbird::input::Input::from(bytes),
                 None => return Ok(()),
-            }
+            };
+
+            let track_handle = {
+                let mut call = call_lock.lock().await;
+                call.enqueue_input(audio_reader).await
+            };
+
+            data.analytics.log("OpenAI_tts".into(), false);
+            track_handle
         }
         TTSMode::XTTS => {
             // Use XTTS local TTS API
             let speaking_rate_f32 = speaking_rate.parse::<f32>().unwrap_or(1.0);
-            match xtts::fetch_xtts_audio(data, &content, &voice, speaking_rate_f32).await? {
-                Some(bytes) => {
-                    // Log details about the audio for debugging
-                    info!("XTTS audio: {} bytes, first 16 bytes: {:?}", 
-                          bytes.len(), 
-                          &bytes[..std::cmp::min(16, bytes.len())]);
-                    
-                    // Try direct bytes input like OpenAI
-                    Some(songbird::input::Input::from(bytes))
+            
+            // Check if xsaid is enabled and should announce name
+            let announce_name = guild_row.xsaid() && data
+                .last_to_xsaid_tracker
+                .get(&guild_id)
+                .is_none_or(|state| {
+                    let guild = ctx.cache.guild(guild_id).unwrap();
+                    state.should_announce_name(&guild, message.author.id)
+                });
+            
+            if announce_name {
+                // Get the user's display name
+                let user_name = message.member.as_ref()
+                    .and_then(|m| m.nick.as_deref())
+                    .or(message.author.global_name.as_deref())
+                    .unwrap_or(&message.author.name);
+                
+                // Use the xsaid-enabled audio generation (returns two separate audio segments)
+                match xtts::fetch_xtts_audio_with_xsaid(data, &content, &voice, speaking_rate_f32, user_name).await? {
+                    Some((xsaid_audio, main_audio)) => {
+                        // Update last xsaid tracker
+                        data.last_to_xsaid_tracker.insert(guild_id, tts_core::structs::LastXsaidInfo::new(message.author.id));
+                        
+                        info!("XTTS xsaid mode: queueing two audio segments");
+                        
+                        // Queue the xsaid audio first
+                        let _xsaid_track = {
+                            let mut call = call_lock.lock().await;
+                            call.enqueue_input(songbird::input::Input::from(xsaid_audio)).await
+                        };
+                        
+                        // Queue the main audio second (with a small delay)
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        let track_handle = {
+                            let mut call = call_lock.lock().await;
+                            call.enqueue_input(songbird::input::Input::from(main_audio)).await
+                        };
+                        
+                        data.analytics.log("XTTS_tts".into(), false);
+                        track_handle
+                    },
+                    None => return Ok(()),
                 }
-                None => return Ok(()),
+            } else {
+                // Regular audio generation without xsaid - use chunked approach for multi-sentence support
+                match xtts::fetch_xtts_audio_chunks(data, &content, &voice, speaking_rate_f32).await? {
+                    Some(audio_chunks) => {
+                        let num_chunks = audio_chunks.len();
+                        let total_bytes: usize = audio_chunks.iter().map(|chunk| chunk.len()).sum();
+                        info!("XTTS regular mode: {} chunks, total {} bytes", num_chunks, total_bytes);
+                        
+                        let mut track_handle = None;
+                        
+                        // Queue each chunk separately for proper audio playback
+                        for (i, chunk) in audio_chunks.into_iter().enumerate() {
+                            info!("Queueing XTTS chunk {}/{}: {} bytes", i + 1, num_chunks, chunk.len());
+                            
+                            let audio_reader = songbird::input::Input::from(chunk);
+                            let handle = {
+                                let mut call = call_lock.lock().await;
+                                call.enqueue_input(audio_reader).await
+                            };
+                            
+                            // Return the first track handle for error tracking
+                            if track_handle.is_none() {
+                                track_handle = Some(handle);
+                            }
+                            
+                            // Small delay between chunks to ensure proper queueing
+                            if i < num_chunks - 1 {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                            }
+                        }
+                        
+                        data.analytics.log("XTTS_tts".into(), false);
+                        track_handle.unwrap() // Safe unwrap since we have at least one chunk
+                    },
+                    None => return Ok(()),
+                }
             }
         }
         _ => {
@@ -214,31 +295,26 @@ pub(crate) async fn process_tts_msg(
 
             // For HTTP responses, get bytes and create input
             let bytes = audio.bytes().await?.to_vec();
-            Some(songbird::input::Input::from(bytes))
+            let audio_reader = songbird::input::Input::from(bytes);
+
+            let track_handle = {
+                let mut call = call_lock.lock().await;
+                call.enqueue_input(audio_reader).await
+            };
+
+            data.analytics.log(
+                Cow::Borrowed(match mode {
+                    TTSMode::gTTS => "gTTS_tts",
+                    TTSMode::eSpeak => "eSpeak_tts",
+                    TTSMode::gCloud => "gCloud_tts",
+                    TTSMode::Polly => "Polly_tts",
+                    _ => "unknown_tts",
+                }),
+                false,
+            );
+            track_handle
         }
     };
-
-    let Some(audio_reader) = audio_result else {
-        return Ok(());
-    };
-
-    let track_handle = {
-        let mut call = call_lock.lock().await;
-        call.enqueue_input(songbird::input::Input::from(audio_reader))
-            .await
-    };
-
-    data.analytics.log(
-        Cow::Borrowed(match mode {
-            TTSMode::gTTS => "gTTS_tts",
-            TTSMode::eSpeak => "eSpeak_tts",
-            TTSMode::gCloud => "gCloud_tts",
-            TTSMode::Polly => "Polly_tts",
-            TTSMode::OpenAI => "OpenAI_tts",
-            TTSMode::XTTS => "XTTS_tts",
-        }),
-        false,
-    );
 
     let guild_name = ctx.cache.guild(guild_id).try_unwrap()?.name.to_string();
     let (blank_name, blank_value, blank_inline) = errors::blank_field();

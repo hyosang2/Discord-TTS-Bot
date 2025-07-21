@@ -23,6 +23,9 @@ echo "🔄 Activating conda environment: xtts"
 eval "$(conda shell.bash hook)"
 conda activate xtts
 
+# Set environment variable to agree to Coqui TOS
+export COQUI_TOS_AGREED=1
+
 # Check if the environment was activated successfully
 if [ "$CONDA_DEFAULT_ENV" != "xtts" ]; then
     echo "❌ Error: Failed to activate xtts environment"

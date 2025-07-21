@@ -31,3 +31,7 @@ tts_bot_binary
 *.pyc
 __pycache__/
 *.egg-info/
+
+# Logs and launchd
+/logs/
+*.log

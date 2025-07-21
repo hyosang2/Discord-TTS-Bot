@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.discord-tts-bot.xtts</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>source /Users/hyosangahn/.zshrc && conda activate xtts && python -m xtts_api_server --host 0.0.0.0 --port 8000 --device cpu --speaker-folder /Users/hyosangahn/Personal-Projects/Discord-TTS-Bot/xtts_voice_clips --output /Users/hyosangahn/Personal-Projects/Discord-TTS-Bot/output --use-cache --model-source api --listen</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/hyosangahn/Personal-Projects/Discord-TTS-Bot</string>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    
+    <key>StartInterval</key>
+    <integer>30</integer>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/hyosangahn/Personal-Projects/Discord-TTS-Bot/logs/xtts.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/hyosangahn/Personal-Projects/Discord-TTS-Bot/logs/xtts.error.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/miniconda3/bin:/opt/miniconda3/condabin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/hyosangahn</string>
+        <key>COQUI_TOS_AGREED</key>
+        <string>1</string>
+    </dict>
+</dict>
+</plist>

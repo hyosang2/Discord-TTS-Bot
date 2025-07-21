@@ -260,6 +260,10 @@ async fn fetch_xtts_chunk(
     _speaking_rate: f32,
     xtts_service_url: &reqwest::Url,
 ) -> Result<Vec<u8>> {
+    // Log the voice cloning details for this chunk
+    info!("XTTS API call - Text: '{}', Voice sample: '{}', Language: '{}'", 
+          text, speaker_wav, language);
+    
     // Create request for native XTTS API
     let request = NativeXTTSRequest {
         text: text.to_string(),
@@ -290,13 +294,15 @@ async fn fetch_xtts_chunk(
     Ok(audio_bytes)
 }
 
-/// Fetch audio from XTTS service (with text chunking support)
-pub async fn fetch_xtts_audio(
+/// Fetch audio chunks from XTTS service (returns separate chunks for proper audio playback)
+pub async fn fetch_xtts_audio_chunks(
     data: &Data,
     text: &str,
     voice_name: &str,
     speaking_rate: f32,
-) -> Result<Option<Vec<u8>>> {
+) -> Result<Option<Vec<Vec<u8>>>> {
+    info!("fetch_xtts_audio_chunks called with text: '{}', voice: '{}'", text, voice_name);
+    
     let Some(xtts_service_url) = &data.config.xtts_service else {
         error!("XTTS service URL not configured");
         return Ok(None);
@@ -304,6 +310,7 @@ pub async fn fetch_xtts_audio(
     
     // Detect language from text
     let detected_language = detect_language(text);
+    info!("Detected language: {:?}", detected_language);
     
     // Get voice clip path
     let voice_clip_path = match get_voice_clip_path(
@@ -327,6 +334,9 @@ pub async fn fetch_xtts_audio(
     // Use detected language or default to English
     let language = detected_language.unwrap_or_else(|| "en".to_string());
     
+    // Log which voice sample is being used for cloning
+    info!("Using voice sample for cloning: {} (full path: {:?})", speaker_wav, voice_clip_path);
+    
     // Split text into chunks if it's too long
     let text_chunks = split_text_for_xtts(text);
     
@@ -334,7 +344,7 @@ pub async fn fetch_xtts_audio(
         info!("Splitting long text into {} chunks for XTTS processing", text_chunks.len());
     }
     
-    let mut all_audio_data = Vec::new();
+    let mut audio_chunks = Vec::new();
     
     // Process each chunk
     for (i, chunk) in text_chunks.iter().enumerate() {
@@ -349,15 +359,7 @@ pub async fn fetch_xtts_audio(
             xtts_service_url,
         ).await {
             Ok(audio_data) => {
-                all_audio_data.extend(audio_data);
-                
-                // Add a small silence between chunks (except for the last one)
-                if i < text_chunks.len() - 1 {
-                    // Add ~0.3 seconds of silence (rough estimate for 22050 Hz, 16-bit mono)
-                    let silence_samples = (22050.0 * 0.3 * 2.0) as usize; // 2 bytes per sample
-                    let silence_bytes = vec![0u8; silence_samples];
-                    all_audio_data.extend(silence_bytes);
-                }
+                audio_chunks.push(audio_data);
             }
             Err(e) => {
                 error!("Failed to process chunk {}: {}", i + 1, e);
@@ -366,15 +368,112 @@ pub async fn fetch_xtts_audio(
         }
     }
     
-    if all_audio_data.is_empty() {
+    if audio_chunks.is_empty() {
         warn!("No audio data generated for text: {}", text);
         return Ok(None);
     }
     
-    info!("Generated {} bytes of audio for {} chunks", all_audio_data.len(), text_chunks.len());
-    Ok(Some(all_audio_data))
+    let total_bytes: usize = audio_chunks.iter().map(|chunk| chunk.len()).sum();
+    info!("Generated {} bytes of audio across {} chunks", total_bytes, audio_chunks.len());
+    Ok(Some(audio_chunks))
 }
 
+/// Fetch audio from XTTS service (with text chunking support) - DEPRECATED: Use fetch_xtts_audio_chunks for multi-chunk content
+pub async fn fetch_xtts_audio(
+    data: &Data,
+    text: &str,
+    voice_name: &str,
+    speaking_rate: f32,
+) -> Result<Option<Vec<u8>>> {
+    // For single chunk content, use the chunks function and return first chunk
+    match fetch_xtts_audio_chunks(data, text, voice_name, speaking_rate).await? {
+        Some(chunks) if chunks.len() == 1 => Ok(Some(chunks.into_iter().next().unwrap())),
+        Some(chunks) => {
+            warn!("fetch_xtts_audio called with multi-chunk content ({} chunks). Consider using fetch_xtts_audio_chunks for proper audio playback.", chunks.len());
+            // Return first chunk only to maintain backward compatibility
+            Ok(Some(chunks.into_iter().next().unwrap()))
+        },
+        None => Ok(None),
+    }
+}
+
+
+/// Fetch both xsaid and main audio separately for sequential playback
+pub async fn fetch_xtts_audio_with_xsaid(
+    data: &Data,
+    text: &str,
+    voice_name: &str,
+    speaking_rate: f32,
+    user_name: &str,
+) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    let Some(xtts_service_url) = &data.config.xtts_service else {
+        error!("XTTS service URL not configured");
+        return Ok(None);
+    };
+    
+    // Get voice clip path for English (for "User said" part)
+    let _english_voice_clip_path = match get_voice_clip_path(
+        &data.xtts_voice_cache,
+        voice_name,
+        Some("en"),
+    ) {
+        Some(path) => path,
+        None => {
+            warn!("No English voice clip found for voice: {}", voice_name);
+            return Ok(None);
+        }
+    };
+    
+    // Convert path to relative format for native API
+    let english_speaker_wav = format!("{}/en.wav", voice_name);
+    
+    // Log which English voice sample is being used for xsaid
+    info!("Using English voice sample for xsaid: {} (full path: {:?})", english_speaker_wav, _english_voice_clip_path);
+    
+    // Generate "User said" audio in English
+    let xsaid_text = format!("{} said", user_name);
+    info!("Generating xsaid audio: '{}'", xsaid_text);
+    
+    let xsaid_audio = match fetch_xtts_chunk(
+        data,
+        &xsaid_text,
+        &english_speaker_wav,
+        "en",
+        speaking_rate,
+        xtts_service_url,
+    ).await {
+        Ok(audio) => {
+            info!("Generated xsaid audio: {} bytes", audio.len());
+            audio
+        },
+        Err(e) => {
+            error!("Failed to generate xsaid audio: {}", e);
+            return Err(e);
+        }
+    };
+    
+    // Generate main content audio using regular fetch_xtts_audio
+    info!("Generating main content audio: '{}' with voice '{}'", text, voice_name);
+    let main_audio = match fetch_xtts_audio(data, text, voice_name, speaking_rate).await? {
+        Some(audio) => {
+            info!("Generated main audio: {} bytes", audio.len());
+            audio
+        },
+        None => {
+            error!("Failed to generate main audio - fetch_xtts_audio returned None");
+            return Ok(None);
+        }
+    };
+    
+    // Store lengths before moving the vectors
+    let xsaid_len = xsaid_audio.len();
+    let main_len = main_audio.len();
+    
+    info!("Generated separate audio segments: xsaid={} bytes, main={} bytes", 
+          xsaid_len, main_len);
+    
+    Ok(Some((xsaid_audio, main_audio)))
+}
 
 /// Get list of available voices
 pub fn get_available_voices(voice_cache: &VoiceCache) -> Vec<(String, Vec<String>)> {

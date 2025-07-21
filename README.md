@@ -574,6 +574,10 @@ jobs:
 - **Performance improvement**: 30-40% faster than Docker with Rosetta emulation
 - **Memory usage**: 40% less memory consumption (2-3GB vs 4-5GB)
 - **Architecture**: Native ARM64 processing, no x86_64 emulation overhead
+- **✅ Multi-sentence support**: Proper audio chunking for long messages (250+ characters)
+  - Automatically splits long text into chunks for XTTS processing
+  - Sequential audio playback maintains proper sentence flow
+  - No audio corruption from improper WAV concatenation
 
 ### Prerequisites
 
@@ -709,6 +713,30 @@ curl http://localhost:8000/docs  # Should return HTML page
 ```
 
 For detailed troubleshooting, see `NATIVE-XTTS-SETUP.md`.
+
+### Automatic Startup on macOS
+
+Configure the bot to start automatically when your Mac restarts:
+
+```bash
+# Quick setup - installs all services
+./manage-startup.sh install
+
+# Start services now
+./manage-startup.sh start
+
+# Check status
+./manage-startup.sh status
+```
+
+**Features:**
+- Automatic startup of PostgreSQL, XTTS, and Discord bot
+- Service management (start/stop/restart/status)
+- Automatic restart on crashes
+- Comprehensive logging
+- Individual service control
+
+For detailed setup instructions, see `AUTO-STARTUP-GUIDE.md`.
 
 ## Development
 

@@ -256,6 +256,11 @@ Instruction selection follows priority order in `tts_events/src/message/tts.rs:1
   - [x] Performance optimization: 30-40% faster (15-18s vs 26s for Korean), 40% less memory (2-3GB vs 4-5GB)
   - [x] Conda environment setup with xtts-api-server and PyTorch 2.1.2 compatibility
   - [x] Comprehensive troubleshooting and startup scripts (`start-xtts.sh`, `NATIVE-XTTS-SETUP.md`)
+  - [x] **XTTS Multi-Sentence Fix** - ✅ **COMPLETED**: Fixed audio chunking for long messages
+    - Fixed issue where only first chunk was audible in multi-sentence messages
+    - Replaced raw audio concatenation with sequential Discord audio queueing
+    - Added `fetch_xtts_audio_chunks()` function for proper chunk handling
+    - Maintains backward compatibility with existing single-chunk audio
 
 ### High Priority
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions
