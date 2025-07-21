@@ -20,6 +20,12 @@ docker-compose.yml
 /tmp/
 .DS_Store
 
+# Test scripts and outputs
+test_*.py
+test_*.wav
+Dockerfile.simple
+tts_bot_binary
+
 # Conda environment and Python files
 .conda/
 *.pyc
