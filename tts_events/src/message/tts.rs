@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use aformat::ToArrayString as _;
 use poise::serenity_prelude as serenity;
-use tracing::info;
+use tracing::{info, error};
 
 use tts_core::{
     common::{clean_msg, fetch_audio, fetch_openai_audio, prepare_url},
@@ -229,38 +229,54 @@ pub(crate) async fn process_tts_msg(
                     None => return Ok(()),
                 }
             } else {
-                // Regular audio generation without xsaid - use chunked approach for multi-sentence support
-                match xtts::fetch_xtts_audio_chunks(data, &content, &voice, speaking_rate_f32).await? {
-                    Some(audio_chunks) => {
-                        let num_chunks = audio_chunks.len();
-                        let total_bytes: usize = audio_chunks.iter().map(|chunk| chunk.len()).sum();
-                        info!("XTTS regular mode: {} chunks, total {} bytes", num_chunks, total_bytes);
+                // Regular audio generation without xsaid - use streaming approach for immediate playback
+                match xtts::stream_xtts_audio_chunks(data, &content, &voice, speaking_rate_f32).await? {
+                    Some(mut chunk_receiver) => {
+                        info!("XTTS streaming mode: receiving chunks as they become available");
                         
                         let mut track_handle = None;
+                        let mut chunk_count = 0;
                         
-                        // Queue each chunk separately for proper audio playback
-                        for (i, chunk) in audio_chunks.into_iter().enumerate() {
-                            info!("Queueing XTTS chunk {}/{}: {} bytes", i + 1, num_chunks, chunk.len());
-                            
-                            let audio_reader = songbird::input::Input::from(chunk);
-                            let handle = {
-                                let mut call = call_lock.lock().await;
-                                call.enqueue_input(audio_reader).await
-                            };
-                            
-                            // Return the first track handle for error tracking
-                            if track_handle.is_none() {
-                                track_handle = Some(handle);
-                            }
-                            
-                            // Small delay between chunks to ensure proper queueing
-                            if i < num_chunks - 1 {
-                                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                        // Process chunks as they stream in
+                        while let Some(chunk_result) = chunk_receiver.recv().await {
+                            match chunk_result {
+                                Ok(chunk) => {
+                                    chunk_count += 1;
+                                    info!("Received and queueing XTTS chunk {}: {} bytes", chunk_count, chunk.len());
+                                    
+                                    let audio_reader = songbird::input::Input::from(chunk);
+                                    let handle = {
+                                        let mut call = call_lock.lock().await;
+                                        call.enqueue_input(audio_reader).await
+                                    };
+                                    
+                                    // Return the first track handle for error tracking
+                                    if track_handle.is_none() {
+                                        track_handle = Some(handle);
+                                        info!("Started playback of first chunk - subsequent chunks will follow automatically");
+                                    } else {
+                                        // Add breathing time between chunks (similar to xsaid delay)
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                    }
+                                },
+                                Err(e) => {
+                                    error!("Error receiving chunk: {}", e);
+                                    if track_handle.is_none() {
+                                        return Err(e); // Return error if we haven't started playback yet
+                                    }
+                                    break; // Continue with already queued audio
+                                }
                             }
                         }
                         
+                        info!("XTTS streaming complete: {} chunks queued", chunk_count);
                         data.analytics.log("XTTS_tts".into(), false);
-                        track_handle.unwrap() // Safe unwrap since we have at least one chunk
+                        
+                        if let Some(handle) = track_handle {
+                            handle
+                        } else {
+                            return Ok(()); // No chunks received
+                        }
                     },
                     None => return Ok(()),
                 }

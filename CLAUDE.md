@@ -261,6 +261,13 @@ Instruction selection follows priority order in `tts_events/src/message/tts.rs:1
     - Replaced raw audio concatenation with sequential Discord audio queueing
     - Added `fetch_xtts_audio_chunks()` function for proper chunk handling
     - Maintains backward compatibility with existing single-chunk audio
+  - [x] **XTTS Multi-Language Punctuation Support** - ✅ **COMPLETED**: Enhanced chunking for Asian languages
+    - Added support for Japanese punctuation marks: `。` (period), `！` (exclamation), `？` (question), `、` (comma)
+    - Added support for Chinese punctuation marks: `。` `！` `？` `，`
+    - Improved Korean text handling with proper sentence ending detection
+    - Switched from byte-based to character-based counting for accurate multi-byte Unicode handling
+    - Added 100ms breathing time between chunks for natural speech flow (matching xsaid delay)
+    - Maintains 250-character chunking limit to avoid playback gaps while supporting natural break points
 
 ### High Priority
 - [ ] **Disable "premium feature" warnings** - Remove or make optional the premium-only restrictions

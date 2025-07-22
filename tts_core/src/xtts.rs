@@ -142,44 +142,105 @@ pub fn detect_language(text: &str) -> Option<String> {
 
 /// Split text into chunks that fit within XTTS character limit
 fn split_text_for_xtts(text: &str) -> Vec<String> {
-    if text.len() <= XTTS_CHAR_LIMIT {
+    let total_chars = text.chars().count();
+    
+    if total_chars <= XTTS_CHAR_LIMIT {
         return vec![text.to_string()];
     }
     
     let mut chunks = Vec::new();
     let mut current_chunk = String::new();
+    let mut current_char_count = 0;
     
-    // Split by sentences first (periods, exclamation marks, question marks)
-    let sentence_endings = ['.', '!', '?'];
+    // Function to check if a character is a sentence ending
+    let is_sentence_ending = |ch: char| -> bool {
+        matches!(ch,
+            // ASCII punctuation
+            '.' | '!' | '?' |
+            // Japanese/Chinese/Korean punctuation (full-width)
+            '。' | '！' | '？'
+        )
+    };
+    
+    // Function to check if a character is a soft break point (for long sentences)
+    let is_soft_break = |ch: char| -> bool {
+        matches!(ch,
+            // Commas and other pause points
+            ',' | '、' | '，' | ';' | '；' | ':' | '：'
+        )
+    };
+    
     let mut sentence_start = 0;
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let mut last_soft_break = None;
+    let mut last_soft_break_char_count = 0;
     
-    for (i, ch) in text.char_indices() {
-        if sentence_endings.contains(&ch) {
-            let sentence = &text[sentence_start..=i];
+    for (idx, &(_byte_pos, ch)) in chars.iter().enumerate() {
+        let chars_since_start = text[sentence_start..chars.get(idx + 1).map(|(pos, _)| *pos).unwrap_or(text.len())].chars().count();
+        
+        // Track soft break points
+        if is_soft_break(ch) && current_char_count + chars_since_start <= XTTS_CHAR_LIMIT {
+            last_soft_break = Some(idx);
+            last_soft_break_char_count = current_char_count + chars_since_start;
+        }
+        
+        // Check if we need to break at a soft break point
+        if current_char_count + chars_since_start > XTTS_CHAR_LIMIT - 50 && last_soft_break.is_some() {
+            let break_idx = last_soft_break.unwrap();
+            let end_pos = if break_idx + 1 < chars.len() {
+                chars[break_idx + 1].0
+            } else {
+                text.len()
+            };
+            
+            let segment = &text[sentence_start..end_pos];
+            current_chunk.push_str(segment);
+            chunks.push(current_chunk.trim().to_string());
+            current_chunk.clear();
+            current_char_count = 0;
+            sentence_start = end_pos;
+            last_soft_break = None;
+            last_soft_break_char_count = 0;
+            continue;
+        }
+        
+        if is_sentence_ending(ch) || (idx == chars.len() - 1) {
+            // Get the byte position of the next character (or end of string)
+            let end_pos = if idx + 1 < chars.len() {
+                chars[idx + 1].0
+            } else {
+                text.len()
+            };
+            
+            let sentence = &text[sentence_start..end_pos];
+            let sentence_char_count = sentence.chars().count();
             
             // If adding this sentence would exceed the limit, save current chunk
-            if current_chunk.len() + sentence.len() > XTTS_CHAR_LIMIT && !current_chunk.is_empty() {
+            if current_char_count + sentence_char_count > XTTS_CHAR_LIMIT && current_char_count > 0 {
                 chunks.push(current_chunk.trim().to_string());
                 current_chunk.clear();
+                current_char_count = 0;
             }
             
             current_chunk.push_str(sentence);
-            sentence_start = i + 1;
+            current_char_count += sentence_char_count;
+            sentence_start = end_pos;
+            last_soft_break = None;
+            last_soft_break_char_count = 0;
             
-            // If this single sentence is too long, we need to split by words
-            if current_chunk.len() > XTTS_CHAR_LIMIT {
-                chunks.push(current_chunk.trim().to_string());
-                current_chunk.clear();
-            }
+            // If this single sentence is too long, we already handled it with soft breaks
         }
     }
     
     // Add remaining text if sentence-based splitting didn't cover everything
     if sentence_start < text.len() {
         let remaining = &text[sentence_start..];
-        if current_chunk.len() + remaining.len() > XTTS_CHAR_LIMIT && !current_chunk.is_empty() {
+        let remaining_char_count = remaining.chars().count();
+        
+        if current_char_count + remaining_char_count > XTTS_CHAR_LIMIT && current_char_count > 0 {
             chunks.push(current_chunk.trim().to_string());
             current_chunk.clear();
+            current_char_count = 0;
         }
         current_chunk.push_str(remaining);
     }
@@ -189,29 +250,30 @@ fn split_text_for_xtts(text: &str) -> Vec<String> {
         chunks.push(current_chunk.trim().to_string());
     }
     
-    // Fallback: if we still have chunks that are too long, split by words
+    // Fallback: if we still have chunks that are too long, split by character count
     let mut final_chunks = Vec::new();
     for chunk in chunks {
-        if chunk.len() <= XTTS_CHAR_LIMIT {
+        let chunk_char_count = chunk.chars().count();
+        if chunk_char_count <= XTTS_CHAR_LIMIT {
             final_chunks.push(chunk);
         } else {
-            // Split by words as last resort
-            let words: Vec<&str> = chunk.split_whitespace().collect();
-            let mut word_chunk = String::new();
+            // For languages without spaces (Japanese, Chinese, etc.), split by character count
+            let chars: Vec<char> = chunk.chars().collect();
+            let mut char_chunk = String::new();
+            let mut count = 0;
             
-            for word in words {
-                if word_chunk.len() + word.len() + 1 > XTTS_CHAR_LIMIT && !word_chunk.is_empty() {
-                    final_chunks.push(word_chunk.trim().to_string());
-                    word_chunk.clear();
+            for ch in chars {
+                if count >= XTTS_CHAR_LIMIT {
+                    final_chunks.push(char_chunk.trim().to_string());
+                    char_chunk.clear();
+                    count = 0;
                 }
-                if !word_chunk.is_empty() {
-                    word_chunk.push(' ');
-                }
-                word_chunk.push_str(word);
+                char_chunk.push(ch);
+                count += 1;
             }
             
-            if !word_chunk.is_empty() {
-                final_chunks.push(word_chunk.trim().to_string());
+            if !char_chunk.is_empty() {
+                final_chunks.push(char_chunk.trim().to_string());
             }
         }
     }
@@ -294,6 +356,120 @@ async fn fetch_xtts_chunk(
     Ok(audio_bytes)
 }
 
+/// Stream audio chunks from XTTS service as they become available (sequential for faster first chunk)
+pub async fn stream_xtts_audio_chunks(
+    data: &Data,
+    text: &str,
+    voice_name: &str,
+    _speaking_rate: f32,
+) -> Result<Option<tokio::sync::mpsc::Receiver<Result<Vec<u8>>>>> {
+    use tokio::sync::mpsc;
+    
+    info!("stream_xtts_audio_chunks called with text: '{}', voice: '{}'", text, voice_name);
+    
+    let Some(xtts_service_url) = &data.config.xtts_service else {
+        error!("XTTS service URL not configured");
+        return Ok(None);
+    };
+    
+    // Detect language from text
+    let detected_language = detect_language(text);
+    info!("Detected language: {:?}", detected_language);
+    
+    // Get voice clip path
+    let voice_clip_path = match get_voice_clip_path(
+        &data.xtts_voice_cache,
+        voice_name,
+        detected_language.as_deref(),
+    ) {
+        Some(path) => path,
+        None => {
+            warn!("No voice clip found for voice: {}", voice_name);
+            return Ok(None);
+        }
+    };
+    
+    // Convert path to relative format for native API (voice_name/language.wav)
+    let speaker_wav = format!("{}/{}", voice_name, 
+        voice_clip_path.file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("en.wav"));
+    
+    // Use detected language or default to English
+    let language = detected_language.unwrap_or_else(|| "en".to_string());
+    
+    // Log which voice sample is being used for cloning
+    info!("Using voice sample for cloning: {} (full path: {:?})", speaker_wav, voice_clip_path);
+    
+    // Split text into chunks if it's too long
+    let text_chunks = split_text_for_xtts(text);
+    
+    if text_chunks.len() > 1 {
+        info!("Splitting long text into {} chunks for streaming XTTS processing", text_chunks.len());
+    }
+    
+    let (tx, rx) = mpsc::channel(text_chunks.len());
+    
+    // Clone necessary data for the spawned task
+    let reqwest_client = data.reqwest.clone();
+    let xtts_service_url_clone = xtts_service_url.clone();
+    let speaker_wav_clone = speaker_wav.clone();
+    let language_clone = language.clone();
+    
+    // Spawn task to process chunks sequentially and stream them
+    tokio::spawn(async move {
+        for (i, chunk) in text_chunks.iter().enumerate() {
+            info!("Processing chunk {}/{}: {} characters", i + 1, text_chunks.len(), chunk.chars().count());
+            
+            // Inline the XTTS API call since we can't pass the full Data struct
+            let result = async {
+                let request = NativeXTTSRequest {
+                    text: chunk.to_string(),
+                    speaker_wav: speaker_wav_clone.clone(),
+                    language: language_clone.clone(),
+                };
+                
+                let mut url = xtts_service_url_clone.clone();
+                url.set_path("/tts_to_audio/");
+                
+                let response = reqwest_client
+                    .post(url)
+                    .json(&request)
+                    .send()
+                    .await?;
+                
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    error!("Native XTTS API error {}: {}", status, error_text);
+                    return Err(anyhow::anyhow!("Native XTTS API error: {}", status));
+                }
+                
+                let audio_bytes = response.bytes().await?.to_vec();
+                Ok(audio_bytes)
+            }.await;
+            
+            match result {
+                Ok(audio_data) => {
+                    info!("Chunk {}/{} ready: {} bytes", i + 1, text_chunks.len(), audio_data.len());
+                    if tx.send(Ok(audio_data)).await.is_err() {
+                        error!("Receiver dropped, stopping chunk processing");
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to process chunk {}: {}", i + 1, e);
+                    let _ = tx.send(Err(e)).await; // Send error to receiver
+                    break;
+                }
+            }
+        }
+        info!("Finished processing all {} chunks", text_chunks.len());
+    });
+    
+    Ok(Some(rx))
+}
+
 /// Fetch audio chunks from XTTS service (returns separate chunks for proper audio playback)
 pub async fn fetch_xtts_audio_chunks(
     data: &Data,
@@ -348,7 +524,7 @@ pub async fn fetch_xtts_audio_chunks(
     
     // Process each chunk
     for (i, chunk) in text_chunks.iter().enumerate() {
-        info!("Processing chunk {}/{}: {} characters", i + 1, text_chunks.len(), chunk.len());
+        info!("Processing chunk {}/{}: {} characters", i + 1, text_chunks.len(), chunk.chars().count());
         
         match fetch_xtts_chunk(
             data,

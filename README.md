@@ -578,6 +578,11 @@ jobs:
   - Automatically splits long text into chunks for XTTS processing
   - Sequential audio playback maintains proper sentence flow
   - No audio corruption from improper WAV concatenation
+- **🌏 Multi-language punctuation support**: Smart chunking for Asian languages
+  - Supports Japanese punctuation: `。` `！` `？` `、`
+  - Supports Chinese punctuation: `。` `！` `？` `，`
+  - Supports Korean sentence endings and proper text flow
+  - Character-based counting (not byte-based) for accurate chunking
 
 ### Prerequisites
 
